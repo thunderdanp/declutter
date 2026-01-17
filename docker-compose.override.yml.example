@@ -1,0 +1,42 @@
+# docker-compose.override.yml
+# 
+# This file allows you to override settings in docker-compose.yml
+# without modifying the original file.
+#
+# Usage:
+# 1. Copy this file: cp docker-compose.override.yml.example docker-compose.override.yml
+# 2. Uncomment and modify the settings you want to change
+# 3. Run: docker-compose up -d
+#
+# Docker Compose automatically merges docker-compose.yml with docker-compose.override.yml
+
+version: '3.8'
+
+services:
+  # Change the exposed port (default is 3000)
+  # frontend:
+  #   ports:
+  #     - "8080:80"  # Change 8080 to your desired port
+
+  # Change JWT secret and other backend settings
+  # backend:
+  #   environment:
+  #     # Use a strong, unique JWT secret in production
+  #     JWT_SECRET: "change-this-to-a-very-long-random-string-in-production"
+
+  # Change database credentials
+  # postgres:
+  #   environment:
+  #     # Change database credentials in production
+  #     POSTGRES_PASSWORD: "your-secure-password-here"
+  #
+  # Uncomment ONLY if you need direct database access (e.g., for pgAdmin)
+  # NOT RECOMMENDED for production - database is accessible via Docker network
+  #   ports:
+  #     - "5432:5432"
+
+# Uncomment to use external volumes (for better backup management)
+# volumes:
+#   postgres_data:
+#     external: true
+#     name: declutter_db_data
