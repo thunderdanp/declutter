@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: declutter_db
+    environment:
+      POSTGRES_DB: declutter_db
+      POSTGRES_USER: declutter_user
+      POSTGRES_PASSWORD: declutter_password
+    # No ports exposed - only accessible within Docker network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U declutter_user -d declutter_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - declutter-network
+
+  backend:
+    build: ./backend
+    container_name: declutter_backend
+    # No ports exposed - only accessible within Docker network
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://declutter_user:declutter_password@postgres:5432/declutter_db
+      JWT_SECRET: your-secret-key-change-this-in-production
+      PORT: 3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - declutter-network
+
+  frontend:
+    build: ./frontend
+    container_name: declutter_frontend
+    ports:
+      - "3000:80"  # Only port exposed to host
+    depends_on:
+      - backend
+    networks:
+      - declutter-network
+
+volumes:
+  postgres_data:
+
+networks:
+  declutter-network:
+    driver: bridge
