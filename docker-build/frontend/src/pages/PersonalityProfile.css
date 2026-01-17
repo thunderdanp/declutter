@@ -1,0 +1,41 @@
+.profile-form {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.section-heading {
+  font-family: 'Crimson Pro', serif;
+  font-size: 1.75rem;
+  color: var(--terracotta);
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--soft-gray);
+}
+
+.btn-large {
+  width: 100%;
+  padding: 1.25rem 2rem;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.success-message,
+.error-message {
+  padding: 1rem;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  font-weight: 500;
+}
+
+.success-message {
+  background: rgba(107, 143, 113, 0.1);
+  color: var(--keep);
+  border: 2px solid var(--keep);
+}
+
+.error-message {
+  background: rgba(184, 120, 114, 0.1);
+  color: var(--discard);
+  border: 2px solid var(--discard);
+}
