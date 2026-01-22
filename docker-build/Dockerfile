@@ -41,12 +41,12 @@ COPY --from=frontend-build /app/frontend/build ./frontend/build
 # Copy nginx configuration
 COPY frontend/nginx.conf /etc/nginx/http.d/default.conf
 
-# Create uploads directory
-RUN mkdir -p /app/uploads
+# Create uploads directory in backend location
+RUN mkdir -p /app/backend/uploads
 
 # Create nginx directories and set permissions
 RUN mkdir -p /var/lib/nginx/tmp /var/log/nginx /run/nginx && \
-    chown -R nginx:nginx /var/lib/nginx /var/log/nginx /run/nginx /app/uploads
+    chown -R nginx:nginx /var/lib/nginx /var/log/nginx /run/nginx /app/backend/uploads
 
 # Expose port 80
 EXPOSE 80
