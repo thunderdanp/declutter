@@ -4,8 +4,10 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs').promises;
 const { Pool } = require('pg');
 const { body, validationResult } = require('express-validator');
+const Anthropic = require('@anthropic-ai/sdk');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -242,6 +244,110 @@ app.post('/api/profile', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Save profile error:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= IMAGE ANALYSIS ROUTE =============
+
+// Analyze image with Claude
+app.post('/api/analyze-image', authenticateToken, upload.single('image'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No image file provided' });
+  }
+
+  try {
+    // Read the uploaded image file
+    const imageBuffer = await fs.readFile(req.file.path);
+    const base64Image = imageBuffer.toString('base64');
+
+    // Determine the media type
+    const mediaType = req.file.mimetype;
+
+    // Initialize Anthropic client
+    const anthropic = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY
+    });
+
+    // Send to Claude for analysis
+    const message = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mediaType,
+                data: base64Image,
+              },
+            },
+            {
+              type: 'text',
+              text: `Please analyze this image and identify what item or items are shown. Provide your response in the following JSON format only, with no additional text:
+
+{
+  "name": "A brief, clear name for the item (e.g., 'Vintage Record Player', 'Winter Coat', 'Kitchen Blender')",
+  "description": "A detailed description of the item including its appearance, condition, and any notable features (2-3 sentences)",
+  "category": "One of these categories: clothing, books, electronics, kitchen, decor, furniture, toys, tools, or other"
+}
+
+Be specific and descriptive. If multiple items are visible, focus on the main/central item.`
+            }
+          ],
+        },
+      ],
+    });
+
+    // Parse Claude's response
+    const responseText = message.content[0].text;
+
+    // Try to extract JSON from the response
+    let analysisResult;
+    try {
+      // Check if the response is wrapped in code blocks
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        analysisResult = JSON.parse(jsonMatch[0]);
+      } else {
+        analysisResult = JSON.parse(responseText);
+      }
+    } catch (parseError) {
+      console.error('Error parsing Claude response:', parseError);
+      console.error('Response was:', responseText);
+      return res.status(500).json({
+        error: 'Could not parse AI response',
+        rawResponse: responseText
+      });
+    }
+
+    // Validate the category
+    const validCategories = ['clothing', 'books', 'electronics', 'kitchen', 'decor', 'furniture', 'toys', 'tools', 'other'];
+    if (!validCategories.includes(analysisResult.category)) {
+      analysisResult.category = 'other';
+    }
+
+    res.json({
+      name: analysisResult.name || 'Unknown Item',
+      description: analysisResult.description || '',
+      category: analysisResult.category || 'other'
+    });
+
+  } catch (error) {
+    console.error('Image analysis error:', error);
+
+    if (error.status === 401) {
+      return res.status(500).json({
+        error: 'API key not configured. Please set ANTHROPIC_API_KEY environment variable.'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Error analyzing image',
+      details: error.message
+    });
   }
 });
 

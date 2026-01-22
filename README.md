@@ -194,6 +194,10 @@ POSTGRES_PASSWORD=your-secure-password
 # JWT Secret (IMPORTANT: Change in production!)
 JWT_SECRET=your-very-long-random-secret-key
 
+# Anthropic API Key (Required for AI image analysis)
+# Get your key from: https://console.anthropic.com/
+ANTHROPIC_API_KEY=your-anthropic-api-key
+
 # Port
 PORT=3000
 ```
