@@ -20,6 +20,8 @@ function EvaluateItem() {
   const [imagePreview, setImagePreview] = useState(null);
   const [recommendation, setRecommendation] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -51,7 +53,7 @@ function EvaluateItem() {
     });
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
       setImage(file);
@@ -60,6 +62,48 @@ function EvaluateItem() {
         setImagePreview(reader.result);
       };
       reader.readAsDataURL(file);
+
+      // Analyze the image with Claude
+      await analyzeImage(file);
+    }
+  };
+
+  const analyzeImage = async (file) => {
+    setAnalyzing(true);
+    setAnalysisError(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch('/api/analyze-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Auto-populate the form fields
+        setFormData(prev => ({
+          ...prev,
+          name: data.name || prev.name,
+          description: data.description || prev.description,
+          category: data.category || prev.category
+        }));
+      } else {
+        const errorData = await response.json();
+        setAnalysisError(errorData.error || 'Failed to analyze image');
+      }
+    } catch (error) {
+      console.error('Error analyzing image:', error);
+      setAnalysisError('Network error while analyzing image');
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -314,6 +358,8 @@ function EvaluateItem() {
     setImage(null);
     setImagePreview(null);
     setRecommendation(null);
+    setAnalyzing(false);
+    setAnalysisError(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -460,13 +506,35 @@ function EvaluateItem() {
                   onChange={handleImageChange}
                   className="file-input"
                   id="image-upload"
+                  disabled={analyzing}
                 />
                 <label htmlFor="image-upload" className="file-label">
-                  {imagePreview ? 'Change Photo' : 'Choose Photo'}
+                  {analyzing ? 'Analyzing...' : imagePreview ? 'Change Photo' : 'Choose Photo'}
                 </label>
                 {imagePreview && (
                   <div className="image-preview">
                     <img src={imagePreview} alt="Preview" />
+                  </div>
+                )}
+                {analyzing && (
+                  <div className="analysis-status">
+                    <p style={{ color: '#007bff', marginTop: '10px' }}>
+                      🔍 Analyzing image with AI... This may take a few seconds.
+                    </p>
+                  </div>
+                )}
+                {!analyzing && formData.name && imagePreview && (
+                  <div className="analysis-status">
+                    <p style={{ color: '#28a745', marginTop: '10px' }}>
+                      ✓ AI has auto-filled item details! Review and edit as needed.
+                    </p>
+                  </div>
+                )}
+                {analysisError && (
+                  <div className="analysis-status">
+                    <p style={{ color: '#dc3545', marginTop: '10px' }}>
+                      ⚠️ {analysisError}
+                    </p>
                   </div>
                 )}
               </div>
