@@ -53,18 +53,80 @@ function EvaluateItem() {
     });
   };
 
+  // Resize image to target size (default 2MB max)
+  const resizeImage = (file, maxSizeBytes = 2 * 1024 * 1024) => {
+    return new Promise((resolve) => {
+      // If file is already small enough, return as-is
+      if (file.size <= maxSizeBytes) {
+        resolve(file);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let { width, height } = img;
+
+          // Calculate scale factor based on file size ratio
+          const scaleFactor = Math.sqrt(maxSizeBytes / file.size);
+          width = Math.floor(width * scaleFactor);
+          height = Math.floor(height * scaleFactor);
+
+          // Ensure minimum dimensions
+          const maxDimension = 1920;
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = Math.floor(height * (maxDimension / width));
+              width = maxDimension;
+            } else {
+              width = Math.floor(width * (maxDimension / height));
+              height = maxDimension;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to blob with quality adjustment
+          canvas.toBlob(
+            (blob) => {
+              const resizedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now()
+              });
+              console.log(`Image resized: ${(file.size / 1024 / 1024).toFixed(2)}MB -> ${(resizedFile.size / 1024 / 1024).toFixed(2)}MB`);
+              resolve(resizedFile);
+            },
+            'image/jpeg',
+            0.85
+          );
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleImageChange = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      setImage(file);
+      // Resize image if needed
+      const resizedFile = await resizeImage(file);
+      setImage(resizedFile);
+
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result);
       };
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(resizedFile);
 
       // Analyze the image with Claude
-      await analyzeImage(file);
+      await analyzeImage(resizedFile);
     }
   };
 
