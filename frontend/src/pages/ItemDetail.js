@@ -15,6 +15,12 @@ function ItemDetail() {
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
   useEffect(() => {
     fetchItem();
     fetchProfile();
@@ -205,6 +211,7 @@ function ItemDetail() {
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link">History</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
 

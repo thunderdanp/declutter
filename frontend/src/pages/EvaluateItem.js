@@ -26,6 +26,12 @@ function EvaluateItem() {
   const [analysisError, setAnalysisError] = useState(null);
   const navigate = useNavigate();
 
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
+
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -269,6 +275,7 @@ function EvaluateItem() {
             <Link to="/evaluate" className="nav-link active">Evaluate Item</Link>
             <Link to="/history" className="nav-link">History</Link>
             {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+            <button onClick={handleLogout} className="btn-logout">Logout</button>
           </div>
         </nav>
 
@@ -314,6 +321,8 @@ function EvaluateItem() {
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link active">Evaluate Item</Link>
           <Link to="/history" className="nav-link">History</Link>
+          {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
 

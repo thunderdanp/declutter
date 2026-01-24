@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import './ItemHistory.css';
 
 function ItemHistory() {
+  const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
 
   useEffect(() => {
     fetchItems();
@@ -66,6 +74,8 @@ function ItemHistory() {
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link active">History</Link>
+          {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
 

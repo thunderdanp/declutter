@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import './PersonalityProfile.css';
 
 function PersonalityProfile() {
+  const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [profile, setProfile] = useState({
     declutterGoal: '',
     sentimentalValue: '',
@@ -19,6 +20,12 @@ function PersonalityProfile() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
 
   useEffect(() => {
     fetchProfile();
@@ -97,6 +104,8 @@ function PersonalityProfile() {
           <Link to="/profile" className="nav-link active">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link">History</Link>
+          {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
 
