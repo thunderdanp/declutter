@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 
@@ -10,7 +10,90 @@ function UserSettings({ setIsAuthenticated }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [rooms, setRooms] = useState([]);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [roomLoading, setRoomLoading] = useState(false);
+  const [roomMessage, setRoomMessage] = useState('');
+  const [roomError, setRoomError] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  const fetchRooms = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/rooms', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRooms(data.rooms);
+      }
+    } catch (err) {
+      console.error('Error fetching rooms:', err);
+    }
+  };
+
+  const handleAddRoom = async (e) => {
+    e.preventDefault();
+    if (!newRoomName.trim()) return;
+
+    setRoomLoading(true);
+    setRoomError('');
+    setRoomMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/rooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ name: newRoomName.trim() })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setRooms([...rooms, data.room].sort((a, b) => a.name.localeCompare(b.name)));
+        setNewRoomName('');
+        setRoomMessage('Room added successfully');
+        setTimeout(() => setRoomMessage(''), 3000);
+      } else {
+        setRoomError(data.error || 'Failed to add room');
+      }
+    } catch (err) {
+      setRoomError('Network error. Please try again.');
+    } finally {
+      setRoomLoading(false);
+    }
+  };
+
+  const handleDeleteRoom = async (roomId, roomName) => {
+    if (!window.confirm(`Delete "${roomName}"? Items in this room will keep their current location.`)) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/rooms/${roomId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        setRooms(rooms.filter(r => r.id !== roomId));
+        setRoomMessage('Room deleted');
+        setTimeout(() => setRoomMessage(''), 3000);
+      } else {
+        const data = await response.json();
+        setRoomError(data.error || 'Failed to delete room');
+      }
+    } catch (err) {
+      setRoomError('Network error. Please try again.');
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -147,6 +230,46 @@ function UserSettings({ setIsAuthenticated }) {
 
           <div className="forgot-password-link">
             <p>Forgot your current password? <Link to="/forgot-password">Reset it via email</Link></p>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h2 className="section-title">Manage Rooms</h2>
+          <p className="section-description">Add custom rooms/locations for organizing your items.</p>
+
+          {roomMessage && <div className="message message-success">{roomMessage}</div>}
+          {roomError && <div className="message message-error">{roomError}</div>}
+
+          <form onSubmit={handleAddRoom} className="room-form">
+            <input
+              type="text"
+              value={newRoomName}
+              onChange={(e) => setNewRoomName(e.target.value)}
+              placeholder="Enter room name..."
+              maxLength="100"
+            />
+            <button type="submit" className="btn btn-primary" disabled={roomLoading || !newRoomName.trim()}>
+              {roomLoading ? 'Adding...' : 'Add Room'}
+            </button>
+          </form>
+
+          <div className="rooms-list">
+            {rooms.length === 0 ? (
+              <p className="no-rooms">No custom rooms yet. Add some above!</p>
+            ) : (
+              rooms.map(room => (
+                <div key={room.id} className="room-item">
+                  <span className="room-name">{room.name}</span>
+                  <button
+                    onClick={() => handleDeleteRoom(room.id, room.name)}
+                    className="btn-delete-room"
+                    title="Delete room"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

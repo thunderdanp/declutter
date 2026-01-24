@@ -266,6 +266,73 @@
   font-weight: 600;
 }
 
+/* Room Management Styles */
+.section-description {
+  color: var(--sage);
+  margin-bottom: 1rem;
+}
+
+.room-form {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.room-form input {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--soft-gray);
+  border-radius: 8px;
+  font-size: 1rem;
+}
+
+.room-form input:focus {
+  outline: none;
+  border-color: var(--terracotta);
+}
+
+.rooms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.room-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: var(--cream);
+  border-radius: 8px;
+}
+
+.room-name {
+  font-weight: 500;
+  color: var(--charcoal);
+}
+
+.btn-delete-room {
+  background: none;
+  border: none;
+  color: var(--sage);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 0.5rem;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.btn-delete-room:hover {
+  color: #dc3545;
+}
+
+.no-rooms {
+  color: var(--sage);
+  font-style: italic;
+  text-align: center;
+  padding: 1rem;
+}
+
 @media (max-width: 768px) {
   .dashboard-nav {
     flex-direction: column;

@@ -401,6 +401,73 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
   }
 });
 
+// ============= ROOMS ROUTES =============
+
+// Get user's rooms
+app.get('/api/rooms', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, created_at FROM rooms WHERE user_id = $1 ORDER BY name ASC',
+      [req.user.userId]
+    );
+    res.json({ rooms: result.rows });
+  } catch (error) {
+    console.error('Get rooms error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create a room
+app.post('/api/rooms', authenticateToken, [
+  body('name').trim().notEmpty().isLength({ max: 100 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { name } = req.body;
+
+  try {
+    // Check for duplicate room name for this user
+    const existing = await pool.query(
+      'SELECT id FROM rooms WHERE user_id = $1 AND LOWER(name) = LOWER($2)',
+      [req.user.userId, name]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'A room with this name already exists' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO rooms (user_id, name) VALUES ($1, $2) RETURNING id, name, created_at',
+      [req.user.userId, name]
+    );
+    res.status(201).json({ room: result.rows[0] });
+  } catch (error) {
+    console.error('Create room error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete a room
+app.delete('/api/rooms/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM rooms WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+
+    res.json({ message: 'Room deleted successfully' });
+  } catch (error) {
+    console.error('Delete room error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============= PERSONALITY PROFILE ROUTES =============
 
 // Get personality profile

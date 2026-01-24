@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './EvaluateItem.css';
 
-function EvaluateItem() {
+function EvaluateItem({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [profile, setProfile] = useState(null);
+  const [rooms, setRooms] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -27,7 +28,23 @@ function EvaluateItem() {
 
   useEffect(() => {
     fetchProfile();
+    fetchRooms();
   }, []);
+
+  const fetchRooms = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/rooms', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRooms(data.rooms);
+      }
+    } catch (error) {
+      console.error('Error fetching rooms:', error);
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -533,15 +550,24 @@ function EvaluateItem() {
                 <label>Current Location</label>
                 <select name="location" value={formData.location} onChange={handleChange}>
                   <option value="">Select location...</option>
-                  <option value="bedroom">Bedroom</option>
-                  <option value="living-room">Living Room</option>
-                  <option value="kitchen">Kitchen</option>
-                  <option value="bathroom">Bathroom</option>
-                  <option value="garage">Garage</option>
-                  <option value="attic">Attic</option>
-                  <option value="basement">Basement</option>
-                  <option value="closet">Closet</option>
-                  <option value="other">Other</option>
+                  {rooms.length > 0 && (
+                    <optgroup label="My Rooms">
+                      {rooms.map(room => (
+                        <option key={room.id} value={room.name}>{room.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Common Locations">
+                    <option value="Bedroom">Bedroom</option>
+                    <option value="Living Room">Living Room</option>
+                    <option value="Kitchen">Kitchen</option>
+                    <option value="Bathroom">Bathroom</option>
+                    <option value="Garage">Garage</option>
+                    <option value="Attic">Attic</option>
+                    <option value="Basement">Basement</option>
+                    <option value="Closet">Closet</option>
+                    <option value="Other">Other</option>
+                  </optgroup>
                 </select>
               </div>
 
