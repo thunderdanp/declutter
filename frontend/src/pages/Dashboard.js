@@ -74,35 +74,35 @@ function Dashboard() {
         ) : (
           <>
             <div className="stats-grid">
-              <div className="stat-card stat-total">
+              <Link to="/history" className="stat-card stat-total">
                 <div className="stat-number">{stats?.total || 0}</div>
                 <div className="stat-label">Total Items Evaluated</div>
-              </div>
+              </Link>
 
-              <div className="stat-card stat-keep">
+              <Link to="/history?filter=keep" className="stat-card stat-keep">
                 <div className="stat-number">{getRecommendationCount('keep')}</div>
                 <div className="stat-label">Keep</div>
-              </div>
+              </Link>
 
-              <div className="stat-card stat-storage">
+              <Link to="/history?filter=storage" className="stat-card stat-storage">
                 <div className="stat-number">{getRecommendationCount('storage')}</div>
                 <div className="stat-label">Storage</div>
-              </div>
+              </Link>
 
-              <div className="stat-card stat-sell">
+              <Link to="/history?filter=sell" className="stat-card stat-sell">
                 <div className="stat-number">{getRecommendationCount('sell')}</div>
                 <div className="stat-label">Sell</div>
-              </div>
+              </Link>
 
-              <div className="stat-card stat-donate">
+              <Link to="/history?filter=donate" className="stat-card stat-donate">
                 <div className="stat-number">{getRecommendationCount('donate')}</div>
                 <div className="stat-label">Donate</div>
-              </div>
+              </Link>
 
-              <div className="stat-card stat-discard">
+              <Link to="/history?filter=discard" className="stat-card stat-discard">
                 <div className="stat-number">{getRecommendationCount('discard')}</div>
                 <div className="stat-label">Discard</div>
-              </div>
+              </Link>
             </div>
 
             <div className="quick-actions">

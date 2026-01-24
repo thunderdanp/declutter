@@ -81,6 +81,9 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
   text-align: center;
   transition: transform 0.3s ease;
+  text-decoration: none;
+  display: block;
+  color: inherit;
 }
 
 .stat-card:hover {
