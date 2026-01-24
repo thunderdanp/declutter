@@ -5,6 +5,7 @@ import './ItemDetail.css';
 function ItemDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -105,6 +106,8 @@ function ItemDetail() {
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link">History</Link>
+          <Link to="/settings" className="nav-link">Settings</Link>
+          {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
         </div>
       </nav>
 

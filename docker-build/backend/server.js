@@ -5,9 +5,25 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const { body, validationResult } = require('express-validator');
 const Anthropic = require('@anthropic-ai/sdk');
+const nodemailer = require('nodemailer');
+
+// Email transporter configuration
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_SERVER,
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_LOGIN,
+    pass: process.env.SMTP_PASSWORD
+  },
+  tls: {
+    rejectUnauthorized: process.env.SMTP_OPENSSL_VERIFY_MODE === 'peer'
+  }
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -104,7 +120,28 @@ app.post('/api/auth/register', [
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { email, password, firstName, lastName } = req.body;
+  const { email, password, firstName, lastName, recaptchaToken } = req.body;
+
+  // Verify reCAPTCHA token
+  if (!recaptchaToken) {
+    return res.status(400).json({ error: 'reCAPTCHA verification required' });
+  }
+
+  try {
+    const recaptchaResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`
+    });
+    const recaptchaData = await recaptchaResponse.json();
+
+    if (!recaptchaData.success) {
+      return res.status(400).json({ error: 'reCAPTCHA verification failed' });
+    }
+  } catch (recaptchaError) {
+    console.error('reCAPTCHA verification error:', recaptchaError);
+    return res.status(500).json({ error: 'reCAPTCHA verification error' });
+  }
 
   try {
     // Check if user exists
@@ -160,7 +197,7 @@ app.post('/api/auth/login', [
 
   try {
     const result = await pool.query(
-      'SELECT id, email, password_hash, first_name, last_name FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, first_name, last_name, is_admin FROM users WHERE email = $1',
       [email]
     );
 
@@ -187,12 +224,155 @@ app.post('/api/auth/login', [
         id: user.id,
         email: user.email,
         firstName: user.first_name,
-        lastName: user.last_name
+        lastName: user.last_name,
+        isAdmin: user.is_admin
       }
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Server error during login' });
+  }
+});
+
+// Forgot Password - Request reset link
+app.post('/api/auth/forgot-password', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { email } = req.body;
+
+  try {
+    // Check if user exists
+    const userResult = await pool.query('SELECT id, first_name FROM users WHERE email = $1', [email]);
+
+    // Always return success to prevent email enumeration
+    if (userResult.rows.length === 0) {
+      return res.json({ message: 'If an account exists, a reset link has been sent.' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Generate secure token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+
+    // Invalidate any existing tokens for this user
+    await pool.query('UPDATE password_reset_tokens SET used = TRUE WHERE user_id = $1 AND used = FALSE', [user.id]);
+
+    // Store new token
+    await pool.query(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [user.id, resetToken, expiresAt]
+    );
+
+    // Build reset URL
+    const resetUrl = `${process.env.APP_URL || 'http://localhost'}/reset-password/${resetToken}`;
+
+    // Send email
+    await emailTransporter.sendMail({
+      from: process.env.SMTP_FROM_ADDRESS,
+      to: email,
+      subject: 'Declutter Assistant - Password Reset Request',
+      html: `
+        <h2>Password Reset Request</h2>
+        <p>Hi ${user.first_name},</p>
+        <p>You requested to reset your password for your Declutter Assistant account.</p>
+        <p>Click the link below to reset your password:</p>
+        <p><a href="${resetUrl}">${resetUrl}</a></p>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request this, you can safely ignore this email.</p>
+        <br>
+        <p>- The Declutter Assistant Team</p>
+      `
+    });
+
+    res.json({ message: 'If an account exists, a reset link has been sent.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset Password - Set new password
+app.post('/api/auth/reset-password', [
+  body('token').notEmpty(),
+  body('password').isLength({ min: 6 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { token, password } = req.body;
+
+  try {
+    // Find valid token
+    const tokenResult = await pool.query(
+      `SELECT prt.id, prt.user_id FROM password_reset_tokens prt
+       WHERE prt.token = $1 AND prt.used = FALSE AND prt.expires_at > NOW()`,
+      [token]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset link' });
+    }
+
+    const resetToken = tokenResult.rows[0];
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Update user password
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, resetToken.user_id]);
+
+    // Mark token as used
+    await pool.query('UPDATE password_reset_tokens SET used = TRUE WHERE id = $1', [resetToken.id]);
+
+    res.json({ message: 'Password reset successful' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Change Password (authenticated user)
+app.post('/api/auth/change-password', authenticateToken, [
+  body('currentPassword').notEmpty(),
+  body('newPassword').isLength({ min: 6 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    // Get user's current password hash
+    const userResult = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify current password
+    const validPassword = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
+    if (!validPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash and save new password
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newPasswordHash, req.user.userId]);
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -286,7 +466,7 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
 
     // Send to Claude for analysis
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       messages: [
         {
@@ -670,10 +850,10 @@ app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, 
 // Get system settings
 app.get('/api/admin/settings', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query('SELECT key, value FROM system_settings');
+    const result = await pool.query('SELECT setting_key, setting_value FROM system_settings');
     const settings = {};
     result.rows.forEach(row => {
-      settings[row.key] = row.value;
+      settings[row.setting_key] = row.setting_value;
     });
     res.json(settings);
   } catch (error) {
@@ -691,7 +871,7 @@ app.put('/api/admin/settings/registration_mode', authenticateToken, requireAdmin
     }
 
     await pool.query(
-      'INSERT INTO system_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP',
+      'INSERT INTO system_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP',
       ['registration_mode', value]
     );
     res.json({ message: 'Setting updated' });

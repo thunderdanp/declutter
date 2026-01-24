@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import './PersonalityProfile.css';
 
 function PersonalityProfile() {
+  const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [profile, setProfile] = useState({
     declutterGoal: '',
     sentimentalValue: '',
@@ -97,6 +98,8 @@ function PersonalityProfile() {
           <Link to="/profile" className="nav-link active">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link">History</Link>
+          <Link to="/settings" className="nav-link">Settings</Link>
+          {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
         </div>
       </nav>
 

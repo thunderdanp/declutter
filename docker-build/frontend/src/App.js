@@ -10,6 +10,9 @@ import ItemDetail from './pages/ItemDetail';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import UserSettings from './pages/UserSettings';
 import './App.css';
 
 function App() {
@@ -60,6 +63,12 @@ function App() {
         <Route path="/register" element={
           isAuthenticated ? <Navigate to="/dashboard" /> : <Register setIsAuthenticated={setIsAuthenticated} />
         } />
+        <Route path="/forgot-password" element={
+          isAuthenticated ? <Navigate to="/dashboard" /> : <ForgotPassword />
+        } />
+        <Route path="/reset-password/:token" element={
+          isAuthenticated ? <Navigate to="/dashboard" /> : <ResetPassword />
+        } />
         <Route path="/dashboard" element={
           isAuthenticated ? <Dashboard /> : <Navigate to="/login" />
         } />
@@ -83,6 +92,9 @@ function App() {
         } />
         <Route path="/admin/settings" element={
           isAuthenticated ? <AdminSettings /> : <Navigate to="/login" />
+        } />
+        <Route path="/settings" element={
+          isAuthenticated ? <UserSettings /> : <Navigate to="/login" />
         } />
         <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
       </Routes>

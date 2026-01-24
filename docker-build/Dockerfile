@@ -14,6 +14,10 @@ FROM node:18-alpine AS frontend-build
 
 WORKDIR /app/frontend
 
+# Build argument for reCAPTCHA site key
+ARG REACT_APP_RECAPTCHA_SITE_KEY
+ENV REACT_APP_RECAPTCHA_SITE_KEY=$REACT_APP_RECAPTCHA_SITE_KEY
+
 # Copy frontend files
 COPY frontend/package*.json ./
 RUN npm install

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import './ItemHistory.css';
 
 function ItemHistory() {
+  const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filter, setFilter] = useState(searchParams.get('filter') || 'all');
 
   useEffect(() => {
     fetchItems();
@@ -66,6 +68,8 @@ function ItemHistory() {
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link active">History</Link>
+          <Link to="/settings" className="nav-link">Settings</Link>
+          {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
         </div>
       </nav>
 
@@ -76,39 +80,39 @@ function ItemHistory() {
         </div>
 
         <div className="filter-bar">
-          <button 
+          <button
             className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-            onClick={() => setFilter('all')}
+            onClick={() => { setFilter('all'); setSearchParams({}); }}
           >
             All Items
           </button>
-          <button 
+          <button
             className={`filter-btn ${filter === 'keep' ? 'active' : ''}`}
-            onClick={() => setFilter('keep')}
+            onClick={() => { setFilter('keep'); setSearchParams({ filter: 'keep' }); }}
           >
             Keep
           </button>
-          <button 
+          <button
             className={`filter-btn ${filter === 'storage' ? 'active' : ''}`}
-            onClick={() => setFilter('storage')}
+            onClick={() => { setFilter('storage'); setSearchParams({ filter: 'storage' }); }}
           >
             Storage
           </button>
-          <button 
+          <button
             className={`filter-btn ${filter === 'sell' ? 'active' : ''}`}
-            onClick={() => setFilter('sell')}
+            onClick={() => { setFilter('sell'); setSearchParams({ filter: 'sell' }); }}
           >
             Sell
           </button>
-          <button 
+          <button
             className={`filter-btn ${filter === 'donate' ? 'active' : ''}`}
-            onClick={() => setFilter('donate')}
+            onClick={() => { setFilter('donate'); setSearchParams({ filter: 'donate' }); }}
           >
             Donate
           </button>
-          <button 
+          <button
             className={`filter-btn ${filter === 'discard' ? 'active' : ''}`}
-            onClick={() => setFilter('discard')}
+            onClick={() => { setFilter('discard'); setSearchParams({ filter: 'discard' }); }}
           >
             Discard
           </button>
