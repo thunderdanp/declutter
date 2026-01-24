@@ -163,7 +163,7 @@ function ItemDetail() {
           category: editData.category,
           recommendation: recommendationType,
           recommendationReasoning: reasoning,
-          answers: editData
+          answers: JSON.stringify(editData)
         })
       });
 
