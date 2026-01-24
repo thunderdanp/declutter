@@ -5,9 +5,22 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(100),
     last_name VARCHAR(100),
+    is_admin BOOLEAN DEFAULT FALSE,
+    is_approved BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- System settings table
+CREATE TABLE IF NOT EXISTS system_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default settings
+INSERT INTO system_settings (key, value) VALUES ('registration_mode', 'automatic')
+ON CONFLICT (key) DO NOTHING;
 
 -- Personality profiles table
 CREATE TABLE IF NOT EXISTS personality_profiles (

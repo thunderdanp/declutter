@@ -7,6 +7,9 @@ import PersonalityProfile from './pages/PersonalityProfile';
 import EvaluateItem from './pages/EvaluateItem';
 import ItemHistory from './pages/ItemHistory';
 import ItemDetail from './pages/ItemDetail';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminUsers from './pages/AdminUsers';
+import AdminSettings from './pages/AdminSettings';
 import './App.css';
 
 function App() {
@@ -71,6 +74,15 @@ function App() {
         } />
         <Route path="/items/:id" element={
           isAuthenticated ? <ItemDetail /> : <Navigate to="/login" />
+        } />
+        <Route path="/admin" element={
+          isAuthenticated ? <AdminDashboard /> : <Navigate to="/login" />
+        } />
+        <Route path="/admin/users" element={
+          isAuthenticated ? <AdminUsers /> : <Navigate to="/login" />
+        } />
+        <Route path="/admin/settings" element={
+          isAuthenticated ? <AdminSettings /> : <Navigate to="/login" />
         } />
         <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
       </Routes>
