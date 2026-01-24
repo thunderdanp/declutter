@@ -577,6 +577,130 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
   }
 });
 
+// ============= ADMIN ROUTES =============
+
+// Admin middleware - check if user is admin
+const requireAdmin = async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      'SELECT is_admin FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].is_admin) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+  } catch (error) {
+    console.error('Admin check error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Get admin dashboard stats
+app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const totalUsers = await pool.query('SELECT COUNT(*) FROM users');
+    const pendingUsers = await pool.query('SELECT COUNT(*) FROM users WHERE is_approved = false');
+    const totalItems = await pool.query('SELECT COUNT(*) FROM items');
+    const recentUsers = await pool.query(
+      'SELECT id, email, first_name, last_name, is_approved, is_admin, created_at FROM users ORDER BY created_at DESC LIMIT 5'
+    );
+
+    res.json({
+      totalUsers: parseInt(totalUsers.rows[0].count),
+      pendingUsers: parseInt(pendingUsers.rows[0].count),
+      totalItems: parseInt(totalItems.rows[0].count),
+      recentUsers: recentUsers.rows
+    });
+  } catch (error) {
+    console.error('Admin stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get all users (admin)
+app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT u.id, u.email, u.first_name, u.last_name, u.is_admin, u.is_approved, u.created_at,
+             COUNT(i.id) as item_count
+      FROM users u
+      LEFT JOIN items i ON u.id = i.user_id
+      GROUP BY u.id
+      ORDER BY u.created_at DESC
+    `);
+    res.json({ users: result.rows });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Approve user
+app.patch('/api/admin/users/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await pool.query('UPDATE users SET is_approved = true WHERE id = $1', [id]);
+    res.json({ message: 'User approved' });
+  } catch (error) {
+    console.error('Approve user error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete user
+app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Prevent deleting yourself
+    if (parseInt(id) === req.user.userId) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+
+    await pool.query('DELETE FROM users WHERE id = $1', [id]);
+    res.json({ message: 'User deleted' });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get system settings
+app.get('/api/admin/settings', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT key, value FROM system_settings');
+    const settings = {};
+    result.rows.forEach(row => {
+      settings[row.key] = row.value;
+    });
+    res.json(settings);
+  } catch (error) {
+    console.error('Get settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update registration mode
+app.put('/api/admin/settings/registration_mode', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { value } = req.body;
+    if (!['automatic', 'approval', 'disallowed'].includes(value)) {
+      return res.status(400).json({ error: 'Invalid registration mode' });
+    }
+
+    await pool.query(
+      'INSERT INTO system_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP',
+      ['registration_mode', value]
+    );
+    res.json({ message: 'Setting updated' });
+  } catch (error) {
+    console.error('Update setting error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
