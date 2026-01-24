@@ -70,31 +70,31 @@ function App() {
           isAuthenticated ? <Navigate to="/dashboard" /> : <ResetPassword />
         } />
         <Route path="/dashboard" element={
-          isAuthenticated ? <Dashboard /> : <Navigate to="/login" />
+          isAuthenticated ? <Dashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/profile" element={
-          isAuthenticated ? <PersonalityProfile /> : <Navigate to="/login" />
+          isAuthenticated ? <PersonalityProfile setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/evaluate" element={
-          isAuthenticated ? <EvaluateItem /> : <Navigate to="/login" />
+          isAuthenticated ? <EvaluateItem setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/history" element={
-          isAuthenticated ? <ItemHistory /> : <Navigate to="/login" />
+          isAuthenticated ? <ItemHistory setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/items/:id" element={
-          isAuthenticated ? <ItemDetail /> : <Navigate to="/login" />
+          isAuthenticated ? <ItemDetail setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/admin" element={
-          isAuthenticated ? <AdminDashboard /> : <Navigate to="/login" />
+          isAuthenticated ? <AdminDashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/admin/users" element={
-          isAuthenticated ? <AdminUsers /> : <Navigate to="/login" />
+          isAuthenticated ? <AdminUsers setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/admin/settings" element={
-          isAuthenticated ? <AdminSettings /> : <Navigate to="/login" />
+          isAuthenticated ? <AdminSettings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/settings" element={
-          isAuthenticated ? <UserSettings /> : <Navigate to="/login" />
+          isAuthenticated ? <UserSettings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
         } />
         <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
       </Routes>
