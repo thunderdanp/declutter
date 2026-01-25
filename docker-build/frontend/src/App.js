@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider } from './context/ThemeContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ForgotPassword from './pages/ForgotPassword';
+import Settings from './pages/Settings';
 import Dashboard from './pages/Dashboard';
 import PersonalityProfile from './pages/PersonalityProfile';
 import EvaluateItem from './pages/EvaluateItem';
@@ -62,6 +64,9 @@ function App() {
         <Route path="/register" element={
           isAuthenticated ? <Navigate to="/dashboard" /> : <Register setIsAuthenticated={setIsAuthenticated} />
         } />
+        <Route path="/forgot-password" element={
+          isAuthenticated ? <Navigate to="/dashboard" /> : <ForgotPassword />
+        } />
         <Route path="/dashboard" element={
           isAuthenticated ? <Dashboard /> : <Navigate to="/login" />
         } />
@@ -73,6 +78,9 @@ function App() {
         } />
         <Route path="/history" element={
           isAuthenticated ? <ItemHistory /> : <Navigate to="/login" />
+        } />
+        <Route path="/settings" element={
+          isAuthenticated ? <Settings /> : <Navigate to="/login" />
         } />
         <Route path="/items/:id" element={
           isAuthenticated ? <ItemDetail /> : <Navigate to="/login" />
