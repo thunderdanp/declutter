@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
 import './Dashboard.css';
 
-function Dashboard({ setIsAuthenticated }) {
+function Dashboard() {
   const [stats, setStats] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     const userData = JSON.parse(localStorage.getItem('user'));
@@ -37,7 +39,6 @@ function Dashboard({ setIsAuthenticated }) {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setIsAuthenticated(false);
     navigate('/login');
   };
 
@@ -57,9 +58,12 @@ function Dashboard({ setIsAuthenticated }) {
           <Link to="/dashboard" className="nav-link active">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
-          <Link to="/history" className="nav-link">History</Link>
+          <Link to="/history" className="nav-link">My Items</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? '☀️' : '🌙'}
+          </button>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
@@ -123,7 +127,7 @@ function Dashboard({ setIsAuthenticated }) {
 
                 <Link to="/history" className="action-card">
                   <div className="action-icon">📋</div>
-                  <h3>View History</h3>
+                  <h3>My Items</h3>
                   <p>Review all your evaluated items</p>
                 </Link>
               </div>

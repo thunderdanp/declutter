@@ -11,6 +11,29 @@
   --sell: #7791A8;
   --donate: #A57E94;
   --discard: #B87872;
+  --card-bg: white;
+  --card-shadow: rgba(0, 0, 0, 0.06);
+  --input-bg: var(--warm-white);
+  --nav-bg: white;
+  --body-gradient-start: var(--cream);
+  --body-gradient-end: var(--warm-white);
+  --accent-glow: rgba(212, 115, 92, 0.08);
+}
+
+[data-theme="dark"] {
+  --cream: #1a1a2e;
+  --warm-white: #16213e;
+  --charcoal: #e8e8e8;
+  --soft-gray: #2d3748;
+  --card-bg: #1e2a3a;
+  --card-shadow: rgba(0, 0, 0, 0.3);
+  --input-bg: #2d3748;
+  --nav-bg: #1e2a3a;
+  --body-gradient-start: #1a1a2e;
+  --body-gradient-end: #16213e;
+  --accent-glow: rgba(212, 115, 92, 0.15);
+  --sage: #a8b89d;
+  --terracotta: #e88a73;
 }
 
 * {
@@ -21,10 +44,11 @@
 
 body {
   font-family: 'DM Sans', sans-serif;
-  background: linear-gradient(135deg, var(--cream) 0%, var(--warm-white) 100%);
+  background: linear-gradient(135deg, var(--body-gradient-start) 0%, var(--body-gradient-end) 100%);
   color: var(--charcoal);
   min-height: 100vh;
   overflow-x: hidden;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 body::before {
@@ -34,7 +58,7 @@ body::before {
   right: -20%;
   width: 80%;
   height: 120%;
-  background: radial-gradient(circle, rgba(212, 115, 92, 0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -89,12 +113,13 @@ body::before {
 }
 
 .card {
-  background: white;
+  background: var(--card-bg);
   padding: 2.5rem;
   border-radius: 24px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 8px 32px var(--card-shadow);
   border: 1px solid rgba(212, 115, 92, 0.1);
   margin-bottom: 2rem;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
 .btn {
@@ -123,7 +148,7 @@ body::before {
 }
 
 .btn-secondary {
-  background: white;
+  background: var(--card-bg);
   color: var(--terracotta);
   border: 2px solid var(--terracotta);
 }
@@ -157,7 +182,8 @@ body::before {
   font-family: 'DM Sans', sans-serif;
   font-size: 1rem;
   transition: all 0.3s ease;
-  background: var(--warm-white);
+  background: var(--input-bg);
+  color: var(--charcoal);
 }
 
 .form-group input:focus,

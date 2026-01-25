@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { analyzeItem, generateReasoning, recommendationLabels } from '../utils/recommendationEngine';
+import { useTheme } from '../context/ThemeContext';
 import './EvaluateItem.css';
 
-function EvaluateItem({ setIsAuthenticated }) {
+function EvaluateItem() {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [profile, setProfile] = useState(null);
-  const [rooms, setRooms] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -25,26 +26,17 @@ function EvaluateItem({ setIsAuthenticated }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
 
   useEffect(() => {
     fetchProfile();
-    fetchRooms();
   }, []);
-
-  const fetchRooms = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/rooms', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setRooms(data.rooms);
-      }
-    } catch (error) {
-      console.error('Error fetching rooms:', error);
-    }
-  };
 
   const fetchProfile = async () => {
     try {
@@ -187,177 +179,6 @@ function EvaluateItem({ setIsAuthenticated }) {
     }
   };
 
-  const analyzeItem = () => {
-    let scores = {
-      keep: 0,
-      storage: 0,
-      accessible: 0,
-      sell: 0,
-      donate: 0,
-      discard: 0
-    };
-
-    // Usage analysis
-    if (formData.used === 'yes') {
-      scores.keep += 3;
-      scores.accessible += 2;
-    } else if (formData.used === 'rarely') {
-      scores.storage += 2;
-      scores.accessible += 1;
-    } else {
-      scores.donate += 2;
-      scores.sell += 1;
-      scores.discard += 1;
-    }
-
-    // Sentimental value
-    if (formData.sentimental === 'high') {
-      scores.keep += 3;
-      scores.storage += 2;
-    } else if (formData.sentimental === 'some') {
-      scores.keep += 1;
-      scores.storage += 2;
-    } else {
-      scores.sell += 1;
-      scores.donate += 1;
-    }
-
-    // Condition
-    if (formData.condition === 'excellent' || formData.condition === 'good') {
-      scores.keep += 1;
-      scores.sell += 2;
-      scores.donate += 1;
-    } else if (formData.condition === 'fair') {
-      scores.donate += 2;
-      scores.discard += 1;
-    } else {
-      scores.discard += 3;
-    }
-
-    // Monetary value
-    if (formData.value === 'high') {
-      scores.keep += 2;
-      scores.sell += 3;
-    } else if (formData.value === 'medium') {
-      scores.sell += 2;
-      scores.donate += 1;
-    } else {
-      scores.donate += 2;
-      scores.discard += 1;
-    }
-
-    // Replaceability
-    if (formData.replace === 'difficult') {
-      scores.keep += 2;
-      scores.storage += 2;
-    } else if (formData.replace === 'moderate') {
-      scores.storage += 1;
-    } else {
-      scores.donate += 1;
-      scores.discard += 1;
-    }
-
-    // Space availability
-    if (formData.space === 'yes') {
-      scores.keep += 2;
-      scores.accessible += 3;
-    } else if (formData.space === 'limited') {
-      scores.storage += 2;
-    } else {
-      scores.storage += 1;
-      scores.sell += 1;
-      scores.donate += 1;
-    }
-
-    // Apply personality profile adjustments
-    if (profile) {
-      if (profile.minimalistLevel === 'extreme') {
-        scores.discard += 2;
-        scores.donate += 2;
-        scores.keep -= 1;
-      } else if (profile.minimalistLevel === 'maximalist') {
-        scores.keep += 2;
-        scores.storage += 1;
-      }
-
-      if (profile.budgetPriority === 'very-important' && formData.value !== 'low') {
-        scores.sell += 2;
-      } else if (profile.budgetPriority === 'not-important') {
-        scores.donate += 2;
-      }
-
-      if (profile.sentimentalValue === 'very-sentimental') {
-        scores.keep += 1;
-        scores.storage += 1;
-      }
-
-      if (profile.livingSpace === 'small-apartment' || profile.livingSpace === 'studio') {
-        scores.storage -= 1;
-        scores.donate += 1;
-      }
-    }
-
-    const maxScore = Math.max(...Object.values(scores));
-    return Object.keys(scores).find(key => scores[key] === maxScore);
-  };
-
-  const generateReasoning = (recommendation) => {
-    const reasons = [];
-    const itemName = formData.name || 'This item';
-
-    if (recommendation === 'keep') {
-      reasons.push(`${itemName} appears to be something you should keep in your home.`);
-      if (formData.used === 'yes') {
-        reasons.push('You use this item regularly, which shows it serves an active purpose in your life.');
-      }
-      if (formData.sentimental === 'high') {
-        reasons.push('Its strong sentimental value makes it worth holding onto.');
-      }
-      if (profile?.minimalistLevel === 'maximalist') {
-        reasons.push('Based on your personality profile, you appreciate having variety and enjoy collecting meaningful items.');
-      }
-    } else if (recommendation === 'storage') {
-      reasons.push(`${itemName} would be best placed in storage.`);
-      if (formData.used === 'rarely' || formData.used === 'no') {
-        reasons.push("You don't use this frequently enough to warrant prime real estate in your living space.");
-      }
-      if (formData.replace === 'difficult') {
-        reasons.push("This item would be hard to replace, so it's worth keeping, just not in your main living areas.");
-      }
-    } else if (recommendation === 'accessible') {
-      reasons.push(`${itemName} should be kept in an easily accessible location.`);
-      if (formData.used === 'yes') {
-        reasons.push('You use this item enough that it should be easy to reach when needed.');
-      }
-    } else if (recommendation === 'sell') {
-      reasons.push(`${itemName} is a good candidate for selling.`);
-      if (formData.value === 'high' || formData.value === 'medium') {
-        reasons.push('This item has monetary value that you could recoup through selling.');
-      }
-      if (profile?.budgetPriority === 'very-important') {
-        reasons.push('Based on your profile, recouping money from items is important to you.');
-      }
-    } else if (recommendation === 'donate') {
-      reasons.push(`${itemName} would make a wonderful donation.`);
-      if (formData.condition === 'good' || formData.condition === 'fair') {
-        reasons.push("It's in decent enough condition for someone else to use and appreciate.");
-      }
-      if (profile?.budgetPriority === 'not-important') {
-        reasons.push('Based on your profile, you prefer donating over selling, which is a generous choice.');
-      }
-    } else if (recommendation === 'discard') {
-      reasons.push(`${itemName} can be discarded.`);
-      if (formData.condition === 'poor') {
-        reasons.push("Its poor condition means it's not suitable for donation or resale.");
-      }
-      if (profile?.minimalistLevel === 'extreme') {
-        reasons.push('As someone who values minimalism, letting go of items like this will help you achieve your goals.');
-      }
-    }
-
-    return reasons.join(' ');
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -376,8 +197,8 @@ function EvaluateItem({ setIsAuthenticated }) {
 
     setLoading(true);
 
-    const recommendationType = analyzeItem();
-    const reasoning = generateReasoning(recommendationType);
+    const recommendationType = analyzeItem(formData, profile);
+    const reasoning = generateReasoning(recommendationType, formData, profile);
 
     try {
       const token = localStorage.getItem('token');
@@ -443,15 +264,6 @@ function EvaluateItem({ setIsAuthenticated }) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const recommendationTitles = {
-    keep: 'Keep It',
-    storage: 'Put in Storage',
-    accessible: 'Keep Accessible',
-    sell: 'Sell It',
-    donate: 'Donate It',
-    discard: 'Discard It'
-  };
-
   if (recommendation) {
     return (
       <div className="dashboard-container">
@@ -463,9 +275,13 @@ function EvaluateItem({ setIsAuthenticated }) {
             <Link to="/dashboard" className="nav-link">Dashboard</Link>
             <Link to="/profile" className="nav-link">Profile</Link>
             <Link to="/evaluate" className="nav-link active">Evaluate Item</Link>
-            <Link to="/history" className="nav-link">History</Link>
+            <Link to="/history" className="nav-link">My Items</Link>
             <Link to="/settings" className="nav-link">Settings</Link>
             {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+            <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
+              {isDark ? '☀️' : '🌙'}
+            </button>
+            <button onClick={handleLogout} className="btn-logout">Logout</button>
           </div>
         </nav>
 
@@ -473,9 +289,9 @@ function EvaluateItem({ setIsAuthenticated }) {
           <div className="card result-card">
             <div className="recommendation-display">
               <div className={`recommendation-badge badge-${recommendation.type}`}>
-                {recommendationTitles[recommendation.type]}
+                {recommendationLabels[recommendation.type]}
               </div>
-              <h2>Recommendation: {recommendationTitles[recommendation.type]}</h2>
+              <h2>Recommendation: {recommendationLabels[recommendation.type]}</h2>
             </div>
 
             <div className="reasoning-box">
@@ -510,7 +326,13 @@ function EvaluateItem({ setIsAuthenticated }) {
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link active">Evaluate Item</Link>
-          <Link to="/history" className="nav-link">History</Link>
+          <Link to="/history" className="nav-link">My Items</Link>
+          <Link to="/settings" className="nav-link">Settings</Link>
+          {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? '☀️' : '🌙'}
+          </button>
+          <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
 
@@ -521,6 +343,65 @@ function EvaluateItem({ setIsAuthenticated }) {
         </div>
 
         <form onSubmit={handleSubmit} className="evaluate-form">
+          <div className="card photo-card">
+            <div className="form-group">
+              <label>Take or Upload Photo (Optional)</label>
+              <div className="image-upload-container">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageChange}
+                  className="file-input"
+                  id="camera-upload"
+                  disabled={analyzing}
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="file-input"
+                  id="gallery-upload"
+                  disabled={analyzing}
+                />
+                <div className="photo-buttons">
+                  <label htmlFor="camera-upload" className="file-label photo-button">
+                    {analyzing ? '🔍 Analyzing...' : '📷 Take Photo'}
+                  </label>
+                  <label htmlFor="gallery-upload" className="file-label photo-button photo-button-secondary">
+                    {analyzing ? '🔍 Analyzing...' : '🖼️ Choose from Gallery'}
+                  </label>
+                </div>
+                {imagePreview && (
+                  <div className="image-preview">
+                    <img src={imagePreview} alt="Preview" />
+                  </div>
+                )}
+                {analyzing && (
+                  <div className="analysis-status">
+                    <p className="status-analyzing">
+                      Analyzing image with AI... This may take a few seconds.
+                    </p>
+                  </div>
+                )}
+                {!analyzing && formData.name && imagePreview && (
+                  <div className="analysis-status">
+                    <p className="status-success">
+                      ✓ AI has auto-filled item details! Review and edit as needed.
+                    </p>
+                  </div>
+                )}
+                {analysisError && (
+                  <div className="analysis-status">
+                    <p className="status-error">
+                      ⚠️ {analysisError}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="card">
             <div className="form-group">
               <label>Item Name *</label>
@@ -550,24 +431,15 @@ function EvaluateItem({ setIsAuthenticated }) {
                 <label>Current Location</label>
                 <select name="location" value={formData.location} onChange={handleChange}>
                   <option value="">Select location...</option>
-                  {rooms.length > 0 && (
-                    <optgroup label="My Rooms">
-                      {rooms.map(room => (
-                        <option key={room.id} value={room.name}>{room.name}</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  <optgroup label="Common Locations">
-                    <option value="Bedroom">Bedroom</option>
-                    <option value="Living Room">Living Room</option>
-                    <option value="Kitchen">Kitchen</option>
-                    <option value="Bathroom">Bathroom</option>
-                    <option value="Garage">Garage</option>
-                    <option value="Attic">Attic</option>
-                    <option value="Basement">Basement</option>
-                    <option value="Closet">Closet</option>
-                    <option value="Other">Other</option>
-                  </optgroup>
+                  <option value="bedroom">Bedroom</option>
+                  <option value="living-room">Living Room</option>
+                  <option value="kitchen">Kitchen</option>
+                  <option value="bathroom">Bathroom</option>
+                  <option value="garage">Garage</option>
+                  <option value="attic">Attic</option>
+                  <option value="basement">Basement</option>
+                  <option value="closet">Closet</option>
+                  <option value="other">Other</option>
                 </select>
               </div>
 
@@ -585,49 +457,6 @@ function EvaluateItem({ setIsAuthenticated }) {
                   <option value="tools">Tools</option>
                   <option value="other">Other</option>
                 </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Upload Photo (Optional)</label>
-              <div className="image-upload-container">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="file-input"
-                  id="image-upload"
-                  disabled={analyzing}
-                />
-                <label htmlFor="image-upload" className="file-label">
-                  {analyzing ? 'Analyzing...' : imagePreview ? 'Change Photo' : 'Choose Photo'}
-                </label>
-                {imagePreview && (
-                  <div className="image-preview">
-                    <img src={imagePreview} alt="Preview" />
-                  </div>
-                )}
-                {analyzing && (
-                  <div className="analysis-status">
-                    <p style={{ color: '#007bff', marginTop: '10px' }}>
-                      🔍 Analyzing image with AI... This may take a few seconds.
-                    </p>
-                  </div>
-                )}
-                {!analyzing && formData.name && imagePreview && (
-                  <div className="analysis-status">
-                    <p style={{ color: '#28a745', marginTop: '10px' }}>
-                      ✓ AI has auto-filled item details! Review and edit as needed.
-                    </p>
-                  </div>
-                )}
-                {analysisError && (
-                  <div className="analysis-status">
-                    <p style={{ color: '#dc3545', marginTop: '10px' }}>
-                      ⚠️ {analysisError}
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           </div>

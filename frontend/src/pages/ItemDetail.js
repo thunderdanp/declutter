@@ -211,7 +211,7 @@ function ItemDetail() {
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
-          <Link to="/history" className="nav-link">History</Link>
+          <Link to="/history" className="nav-link">My Items</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
@@ -223,7 +223,7 @@ function ItemDetail() {
 
       <div className="container">
         <div className="back-link">
-          <Link to="/history">← Back to History</Link>
+          <Link to="/history">← Back to My Items</Link>
         </div>
 
         <div className="detail-header">

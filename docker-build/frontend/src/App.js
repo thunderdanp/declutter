@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from './context/ThemeContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -10,9 +11,6 @@ import ItemDetail from './pages/ItemDetail';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import UserSettings from './pages/UserSettings';
 import './App.css';
 
 function App() {
@@ -55,50 +53,43 @@ function App() {
   }
 
   return (
-    <Router>
-      <Routes>
+    <ThemeProvider>
+      <Router>
+        <Routes>
         <Route path="/login" element={
           isAuthenticated ? <Navigate to="/dashboard" /> : <Login setIsAuthenticated={setIsAuthenticated} />
         } />
         <Route path="/register" element={
           isAuthenticated ? <Navigate to="/dashboard" /> : <Register setIsAuthenticated={setIsAuthenticated} />
         } />
-        <Route path="/forgot-password" element={
-          isAuthenticated ? <Navigate to="/dashboard" /> : <ForgotPassword />
-        } />
-        <Route path="/reset-password/:token" element={
-          isAuthenticated ? <Navigate to="/dashboard" /> : <ResetPassword />
-        } />
         <Route path="/dashboard" element={
-          isAuthenticated ? <Dashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
+          isAuthenticated ? <Dashboard /> : <Navigate to="/login" />
         } />
         <Route path="/profile" element={
-          isAuthenticated ? <PersonalityProfile setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
+          isAuthenticated ? <PersonalityProfile /> : <Navigate to="/login" />
         } />
         <Route path="/evaluate" element={
-          isAuthenticated ? <EvaluateItem setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
+          isAuthenticated ? <EvaluateItem /> : <Navigate to="/login" />
         } />
         <Route path="/history" element={
-          isAuthenticated ? <ItemHistory setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
+          isAuthenticated ? <ItemHistory /> : <Navigate to="/login" />
         } />
         <Route path="/items/:id" element={
-          isAuthenticated ? <ItemDetail setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
+          isAuthenticated ? <ItemDetail /> : <Navigate to="/login" />
         } />
         <Route path="/admin" element={
-          isAuthenticated ? <AdminDashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
+          isAuthenticated ? <AdminDashboard /> : <Navigate to="/login" />
         } />
         <Route path="/admin/users" element={
-          isAuthenticated ? <AdminUsers setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
+          isAuthenticated ? <AdminUsers /> : <Navigate to="/login" />
         } />
         <Route path="/admin/settings" element={
-          isAuthenticated ? <AdminSettings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
-        } />
-        <Route path="/settings" element={
-          isAuthenticated ? <UserSettings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />
+          isAuthenticated ? <AdminSettings /> : <Navigate to="/login" />
         } />
         <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} />
-      </Routes>
-    </Router>
+        </Routes>
+      </Router>
+    </ThemeProvider>
   );
 }
 

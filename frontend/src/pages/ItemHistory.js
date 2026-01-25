@@ -76,7 +76,7 @@ function ItemHistory() {
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
-          <Link to="/history" className="nav-link active">History</Link>
+          <Link to="/history" className="nav-link active">My Items</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
@@ -88,7 +88,7 @@ function ItemHistory() {
 
       <div className="container">
         <div className="page-header">
-          <h1 className="page-title">Item History</h1>
+          <h1 className="page-title">My Items</h1>
           <p className="page-subtitle">Review all your evaluated items</p>
         </div>
 

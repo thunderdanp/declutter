@@ -160,7 +160,7 @@ app.post('/api/auth/login', [
 
   try {
     const result = await pool.query(
-      'SELECT id, email, password_hash, first_name, last_name FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, first_name, last_name, is_admin FROM users WHERE email = $1',
       [email]
     );
 
@@ -187,7 +187,8 @@ app.post('/api/auth/login', [
         id: user.id,
         email: user.email,
         firstName: user.first_name,
-        lastName: user.last_name
+        lastName: user.last_name,
+        isAdmin: user.is_admin
       }
     });
   } catch (error) {
@@ -286,7 +287,7 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
 
     // Send to Claude for analysis
     const message = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       messages: [
         {
@@ -670,10 +671,10 @@ app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, 
 // Get system settings
 app.get('/api/admin/settings', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query('SELECT key, value FROM system_settings');
+    const result = await pool.query('SELECT setting_key, setting_value FROM system_settings');
     const settings = {};
     result.rows.forEach(row => {
-      settings[row.key] = row.value;
+      settings[row.setting_key] = row.setting_value;
     });
     res.json(settings);
   } catch (error) {
@@ -691,7 +692,7 @@ app.put('/api/admin/settings/registration_mode', authenticateToken, requireAdmin
     }
 
     await pool.query(
-      'INSERT INTO system_settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = CURRENT_TIMESTAMP',
+      'INSERT INTO system_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP',
       ['registration_mode', value]
     );
     res.json({ message: 'Setting updated' });

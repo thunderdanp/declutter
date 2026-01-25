@@ -58,7 +58,7 @@ function Dashboard() {
           <Link to="/dashboard" className="nav-link active">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
-          <Link to="/history" className="nav-link">History</Link>
+          <Link to="/history" className="nav-link">My Items</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
@@ -127,7 +127,7 @@ function Dashboard() {
 
                 <Link to="/history" className="action-card">
                   <div className="action-icon">📋</div>
-                  <h3>View History</h3>
+                  <h3>My Items</h3>
                   <p>Review all your evaluated items</p>
                 </Link>
               </div>

@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
 import './ItemHistory.css';
 
 function ItemHistory() {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState(searchParams.get('filter') || 'all');
+  const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
 
   useEffect(() => {
     fetchItems();
@@ -67,52 +76,56 @@ function ItemHistory() {
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
-          <Link to="/history" className="nav-link active">History</Link>
+          <Link to="/history" className="nav-link active">My Items</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? '☀️' : '🌙'}
+          </button>
+          <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
 
       <div className="container">
         <div className="page-header">
-          <h1 className="page-title">Item History</h1>
+          <h1 className="page-title">My Items</h1>
           <p className="page-subtitle">Review all your evaluated items</p>
         </div>
 
         <div className="filter-bar">
-          <button
+          <button 
             className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-            onClick={() => { setFilter('all'); setSearchParams({}); }}
+            onClick={() => setFilter('all')}
           >
             All Items
           </button>
-          <button
+          <button 
             className={`filter-btn ${filter === 'keep' ? 'active' : ''}`}
-            onClick={() => { setFilter('keep'); setSearchParams({ filter: 'keep' }); }}
+            onClick={() => setFilter('keep')}
           >
             Keep
           </button>
-          <button
+          <button 
             className={`filter-btn ${filter === 'storage' ? 'active' : ''}`}
-            onClick={() => { setFilter('storage'); setSearchParams({ filter: 'storage' }); }}
+            onClick={() => setFilter('storage')}
           >
             Storage
           </button>
-          <button
+          <button 
             className={`filter-btn ${filter === 'sell' ? 'active' : ''}`}
-            onClick={() => { setFilter('sell'); setSearchParams({ filter: 'sell' }); }}
+            onClick={() => setFilter('sell')}
           >
             Sell
           </button>
-          <button
+          <button 
             className={`filter-btn ${filter === 'donate' ? 'active' : ''}`}
-            onClick={() => { setFilter('donate'); setSearchParams({ filter: 'donate' }); }}
+            onClick={() => setFilter('donate')}
           >
             Donate
           </button>
-          <button
+          <button 
             className={`filter-btn ${filter === 'discard' ? 'active' : ''}`}
-            onClick={() => { setFilter('discard'); setSearchParams({ filter: 'discard' }); }}
+            onClick={() => setFilter('discard')}
           >
             Discard
           </button>
