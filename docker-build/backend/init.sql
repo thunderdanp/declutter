@@ -72,11 +72,27 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 CREATE INDEX idx_password_reset_tokens_token ON password_reset_tokens(token);
 CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
 
+-- Household members table
+CREATE TABLE IF NOT EXISTS household_members (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    relationship VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_household_members_user_id ON household_members(user_id);
+
+-- Add owner_ids column to items table
+ALTER TABLE items ADD COLUMN IF NOT EXISTS owner_ids INTEGER[] DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS idx_items_owner_ids ON items USING GIN(owner_ids);
+
 -- Create indexes for better query performance
-CREATE INDEX idx_items_user_id ON items(user_id);
-CREATE INDEX idx_items_status ON items(status);
-CREATE INDEX idx_items_recommendation ON items(recommendation);
-CREATE INDEX idx_personality_profiles_user_id ON personality_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_items_user_id ON items(user_id);
+CREATE INDEX IF NOT EXISTS idx_items_status ON items(status);
+CREATE INDEX IF NOT EXISTS idx_items_recommendation ON items(recommendation);
+CREATE INDEX IF NOT EXISTS idx_personality_profiles_user_id ON personality_profiles(user_id);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -95,4 +111,7 @@ CREATE TRIGGER update_personality_profiles_updated_at BEFORE UPDATE ON personali
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_items_updated_at BEFORE UPDATE ON items
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_household_members_updated_at BEFORE UPDATE ON household_members
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

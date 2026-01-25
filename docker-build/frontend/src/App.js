@@ -11,6 +11,7 @@ import PersonalityProfile from './pages/PersonalityProfile';
 import EvaluateItem from './pages/EvaluateItem';
 import ItemHistory from './pages/ItemHistory';
 import ItemDetail from './pages/ItemDetail';
+import HouseholdMembers from './pages/HouseholdMembers';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
@@ -88,6 +89,9 @@ function App() {
         } />
         <Route path="/items/:id" element={
           isAuthenticated ? <ItemDetail /> : <Navigate to="/login" />
+        } />
+        <Route path="/household" element={
+          isAuthenticated ? <HouseholdMembers /> : <Navigate to="/login" />
         } />
         <Route path="/admin" element={
           isAuthenticated ? <AdminDashboard /> : <Navigate to="/login" />
