@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Settings from './pages/Settings';
 import Dashboard from './pages/Dashboard';
 import PersonalityProfile from './pages/PersonalityProfile';
@@ -66,6 +67,9 @@ function App() {
         } />
         <Route path="/forgot-password" element={
           isAuthenticated ? <Navigate to="/dashboard" /> : <ForgotPassword />
+        } />
+        <Route path="/reset-password/:token" element={
+          isAuthenticated ? <Navigate to="/dashboard" /> : <ResetPassword />
         } />
         <Route path="/dashboard" element={
           isAuthenticated ? <Dashboard /> : <Navigate to="/login" />
