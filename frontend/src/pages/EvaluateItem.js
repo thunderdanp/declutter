@@ -329,6 +329,9 @@ function EvaluateItem() {
           <Link to="/history" className="nav-link">History</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? '☀️' : '🌙'}
+          </button>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
@@ -340,6 +343,52 @@ function EvaluateItem() {
         </div>
 
         <form onSubmit={handleSubmit} className="evaluate-form">
+          <div className="card photo-card">
+            <div className="form-group">
+              <label>Take or Upload Photo (Optional)</label>
+              <div className="image-upload-container">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageChange}
+                  className="file-input"
+                  id="image-upload"
+                  disabled={analyzing}
+                />
+                <label htmlFor="image-upload" className="file-label photo-button">
+                  {analyzing ? '🔍 Analyzing...' : imagePreview ? '📷 Change Photo' : '📷 Add Photo'}
+                </label>
+                {imagePreview && (
+                  <div className="image-preview">
+                    <img src={imagePreview} alt="Preview" />
+                  </div>
+                )}
+                {analyzing && (
+                  <div className="analysis-status">
+                    <p className="status-analyzing">
+                      Analyzing image with AI... This may take a few seconds.
+                    </p>
+                  </div>
+                )}
+                {!analyzing && formData.name && imagePreview && (
+                  <div className="analysis-status">
+                    <p className="status-success">
+                      ✓ AI has auto-filled item details! Review and edit as needed.
+                    </p>
+                  </div>
+                )}
+                {analysisError && (
+                  <div className="analysis-status">
+                    <p className="status-error">
+                      ⚠️ {analysisError}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="card">
             <div className="form-group">
               <label>Item Name *</label>
@@ -395,49 +444,6 @@ function EvaluateItem() {
                   <option value="tools">Tools</option>
                   <option value="other">Other</option>
                 </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label>Upload Photo (Optional)</label>
-              <div className="image-upload-container">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="file-input"
-                  id="image-upload"
-                  disabled={analyzing}
-                />
-                <label htmlFor="image-upload" className="file-label">
-                  {analyzing ? 'Analyzing...' : imagePreview ? 'Change Photo' : 'Choose Photo'}
-                </label>
-                {imagePreview && (
-                  <div className="image-preview">
-                    <img src={imagePreview} alt="Preview" />
-                  </div>
-                )}
-                {analyzing && (
-                  <div className="analysis-status">
-                    <p style={{ color: '#007bff', marginTop: '10px' }}>
-                      🔍 Analyzing image with AI... This may take a few seconds.
-                    </p>
-                  </div>
-                )}
-                {!analyzing && formData.name && imagePreview && (
-                  <div className="analysis-status">
-                    <p style={{ color: '#28a745', marginTop: '10px' }}>
-                      ✓ AI has auto-filled item details! Review and edit as needed.
-                    </p>
-                  </div>
-                )}
-                {analysisError && (
-                  <div className="analysis-status">
-                    <p style={{ color: '#dc3545', marginTop: '10px' }}>
-                      ⚠️ {analysisError}
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
