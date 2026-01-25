@@ -350,14 +350,28 @@ function EvaluateItem() {
                 <input
                   type="file"
                   accept="image/*"
+                  capture="environment"
                   onChange={handleImageChange}
                   className="file-input"
-                  id="image-upload"
+                  id="camera-upload"
                   disabled={analyzing}
                 />
-                <label htmlFor="image-upload" className="file-label photo-button">
-                  {analyzing ? '🔍 Analyzing...' : imagePreview ? '📷 Change Photo' : '📷 Add Photo'}
-                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="file-input"
+                  id="gallery-upload"
+                  disabled={analyzing}
+                />
+                <div className="photo-buttons">
+                  <label htmlFor="camera-upload" className="file-label photo-button">
+                    {analyzing ? '🔍 Analyzing...' : '📷 Take Photo'}
+                  </label>
+                  <label htmlFor="gallery-upload" className="file-label photo-button photo-button-secondary">
+                    {analyzing ? '🔍 Analyzing...' : '🖼️ Choose from Gallery'}
+                  </label>
+                </div>
                 {imagePreview && (
                   <div className="image-preview">
                     <img src={imagePreview} alt="Preview" />

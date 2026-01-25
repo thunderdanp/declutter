@@ -112,18 +112,36 @@
   color: white;
 }
 
+.photo-buttons {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .file-label.photo-button {
-  padding: 1.25rem 2.5rem;
-  font-size: 1.1rem;
+  padding: 1.25rem 2rem;
+  font-size: 1rem;
   background: linear-gradient(135deg, var(--terracotta) 0%, #C96854 100%);
   color: white;
   border-radius: 12px;
   box-shadow: 0 4px 16px rgba(212, 115, 92, 0.3);
+  min-width: 160px;
+  text-align: center;
 }
 
 .file-label.photo-button:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(212, 115, 92, 0.4);
+}
+
+.file-label.photo-button-secondary {
+  background: linear-gradient(135deg, var(--sage) 0%, #7a8d6e 100%);
+  box-shadow: 0 4px 16px rgba(139, 158, 125, 0.3);
+}
+
+.file-label.photo-button-secondary:hover {
+  box-shadow: 0 8px 24px rgba(139, 158, 125, 0.4);
 }
 
 .image-preview {
