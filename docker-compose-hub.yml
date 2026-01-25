@@ -37,6 +37,7 @@ services:
       JWT_SECRET: your-secret-key-change-this-in-production
       REACT_APP_RECAPTCHA_SITE_KEY: ${REACT_APP_RECAPTCHA_SITE_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY}
       PORT: 3001
     depends_on:
       postgres:

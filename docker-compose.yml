@@ -29,6 +29,7 @@ services:
       DATABASE_URL: postgresql://declutter_user:declutter_password@postgres:5432/declutter_db
       JWT_SECRET: your-secret-key-change-this-in-production
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY}
       PORT: 3001
     depends_on:
       postgres:
