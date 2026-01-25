@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { analyzeItem, generateReasoning, recommendationLabels } from '../utils/recommendationEngine';
+import { useTheme } from '../context/ThemeContext';
 import './ItemDetail.css';
 
 function ItemDetail() {
@@ -14,6 +15,7 @@ function ItemDetail() {
   const [editData, setEditData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
+  const { isDark, toggleTheme } = useTheme();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -212,6 +214,9 @@ function ItemDetail() {
           <Link to="/history" className="nav-link">History</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
+          <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? '☀️' : '🌙'}
+          </button>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>

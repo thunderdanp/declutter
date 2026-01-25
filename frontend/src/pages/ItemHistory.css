@@ -4,15 +4,17 @@
   margin-bottom: 2rem;
   flex-wrap: wrap;
   padding: 1.5rem;
-  background: white;
+  background: var(--card-bg);
   border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px var(--card-shadow);
+  transition: background 0.3s ease;
 }
 
 .filter-btn {
   padding: 0.75rem 1.5rem;
   border: 2px solid var(--soft-gray);
-  background: white;
+  background: var(--card-bg);
+  color: var(--charcoal);
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -39,10 +41,10 @@
 }
 
 .item-card {
-  background: white;
+  background: var(--card-bg);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px var(--card-shadow);
   transition: all 0.3s ease;
   text-decoration: none;
   color: var(--charcoal);
@@ -99,7 +101,7 @@
 .meta-tag {
   font-size: 0.85rem;
   color: var(--sage);
-  background: var(--warm-white);
+  background: var(--input-bg);
   padding: 0.25rem 0.75rem;
   border-radius: 6px;
 }
@@ -137,9 +139,9 @@
 .empty-state {
   text-align: center;
   padding: 4rem 2rem;
-  background: white;
+  background: var(--card-bg);
   border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px var(--card-shadow);
 }
 
 .empty-icon {

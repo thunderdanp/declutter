@@ -3,15 +3,16 @@
 }
 
 .dashboard-nav {
-  background: white;
+  background: var(--nav-bg);
   padding: 1.5rem 2rem;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 12px var(--card-shadow);
   display: flex;
   justify-content: space-between;
   align-items: center;
   position: sticky;
   top: 0;
   z-index: 100;
+  transition: background 0.3s ease;
 }
 
 .nav-brand h2 {
@@ -66,6 +67,25 @@
   color: var(--terracotta);
 }
 
+.btn-theme-toggle {
+  background: none;
+  border: 2px solid var(--soft-gray);
+  color: var(--charcoal);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-theme-toggle:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -75,12 +95,12 @@
 }
 
 .stat-card {
-  background: white;
+  background: var(--card-bg);
   padding: 2rem;
   border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px var(--card-shadow);
   text-align: center;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, background 0.3s ease;
   text-decoration: none;
   display: block;
   color: inherit;
@@ -141,10 +161,10 @@
 }
 
 .action-card {
-  background: white;
+  background: var(--card-bg);
   padding: 2rem;
   border-radius: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px var(--card-shadow);
   text-decoration: none;
   color: var(--charcoal);
   transition: all 0.3s ease;
