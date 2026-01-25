@@ -39,7 +39,10 @@ services:
       - declutter-network
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - REACT_APP_RECAPTCHA_SITE_KEY=${REACT_APP_RECAPTCHA_SITE_KEY}
     container_name: declutter_frontend
     ports:
       - "3000:80"  # Only port exposed to host

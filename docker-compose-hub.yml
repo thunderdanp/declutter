@@ -1,5 +1,11 @@
 version: '3.8'
 
+# NOTE: REACT_APP_RECAPTCHA_SITE_KEY must be baked into the Docker image at build time.
+# To build with reCAPTCHA support, run from docker-build directory:
+#   docker buildx build --platform linux/amd64 \
+#     --build-arg REACT_APP_RECAPTCHA_SITE_KEY=your_site_key_here \
+#     -t thunderdanp/declutter:latest --push .
+
 services:
   postgres:
     image: postgres:15-alpine

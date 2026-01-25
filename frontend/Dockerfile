@@ -2,6 +2,10 @@ FROM node:18-alpine as build
 
 WORKDIR /app
 
+# Build argument for reCAPTCHA site key
+ARG REACT_APP_RECAPTCHA_SITE_KEY
+ENV REACT_APP_RECAPTCHA_SITE_KEY=$REACT_APP_RECAPTCHA_SITE_KEY
+
 # Copy package files
 COPY package*.json ./
 

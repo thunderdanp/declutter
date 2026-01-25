@@ -38,7 +38,7 @@ function Register({ setIsAuthenticated }) {
       return;
     }
 
-    if (!captchaToken) {
+    if (process.env.REACT_APP_RECAPTCHA_SITE_KEY && !captchaToken) {
       setError('Please complete the captcha');
       return;
     }
@@ -154,14 +154,16 @@ function Register({ setIsAuthenticated }) {
 
           {error && <div className="error-message">{error}</div>}
 
-          <div className="recaptcha-container">
-            <ReCAPTCHA
-              ref={recaptchaRef}
-              sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY}
-              onChange={setCaptchaToken}
-              onExpired={() => setCaptchaToken(null)}
-            />
-          </div>
+          {process.env.REACT_APP_RECAPTCHA_SITE_KEY && (
+            <div className="recaptcha-container">
+              <ReCAPTCHA
+                ref={recaptchaRef}
+                sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY}
+                onChange={setCaptchaToken}
+                onExpired={() => setCaptchaToken(null)}
+              />
+            </div>
+          )}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Creating account...' : 'Create Account'}

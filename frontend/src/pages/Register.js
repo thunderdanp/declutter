@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import ReCAPTCHA from 'react-google-recaptcha';
 import './Auth.css';
 
 function Register({ setIsAuthenticated }) {
@@ -12,6 +13,8 @@ function Register({ setIsAuthenticated }) {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const recaptchaRef = useRef(null);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -35,6 +38,11 @@ function Register({ setIsAuthenticated }) {
       return;
     }
 
+    if (process.env.REACT_APP_RECAPTCHA_SITE_KEY && !captchaToken) {
+      setError('Please complete the captcha');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -47,7 +55,8 @@ function Register({ setIsAuthenticated }) {
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email,
-          password: formData.password
+          password: formData.password,
+          recaptchaToken: captchaToken
         })
       });
 
@@ -60,9 +69,13 @@ function Register({ setIsAuthenticated }) {
         navigate('/profile'); // Go to personality profile setup
       } else {
         setError(data.error || 'Registration failed');
+        recaptchaRef.current?.reset();
+        setCaptchaToken(null);
       }
     } catch (err) {
       setError('Network error. Please try again.');
+      recaptchaRef.current?.reset();
+      setCaptchaToken(null);
     } finally {
       setLoading(false);
     }
@@ -140,6 +153,17 @@ function Register({ setIsAuthenticated }) {
           </div>
 
           {error && <div className="error-message">{error}</div>}
+
+          {process.env.REACT_APP_RECAPTCHA_SITE_KEY && (
+            <div className="recaptcha-container">
+              <ReCAPTCHA
+                ref={recaptchaRef}
+                sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY}
+                onChange={setCaptchaToken}
+                onExpired={() => setCaptchaToken(null)}
+              />
+            </div>
+          )}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Creating account...' : 'Create Account'}
