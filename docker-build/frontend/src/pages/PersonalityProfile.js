@@ -99,9 +99,9 @@ function PersonalityProfile({ setIsAuthenticated }) {
   return (
     <div className="dashboard-container">
       <nav className="dashboard-nav">
-        <div className="nav-brand">
+        <Link to="/dashboard" className="nav-brand">
           <h2>Declutter Assistant</h2>
-        </div>
+        </Link>
         <div className="nav-links">
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/profile" className="nav-link active">Profile</Link>

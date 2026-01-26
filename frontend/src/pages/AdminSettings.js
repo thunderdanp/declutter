@@ -74,9 +74,9 @@ function AdminSettings({ setIsAuthenticated }) {
   return (
     <div className="dashboard-container">
       <nav className="dashboard-nav">
-        <div className="nav-brand">
+        <Link to="/dashboard" className="nav-brand">
           <h2>Declutter Assistant - Admin</h2>
-        </div>
+        </Link>
         <div className="nav-links">
           <Link to="/admin" className="nav-link">Admin Dashboard</Link>
           <Link to="/admin/users" className="nav-link">Users</Link>

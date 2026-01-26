@@ -17,6 +17,10 @@
   z-index: 100;
 }
 
+.landing-nav .nav-brand {
+  text-decoration: none;
+}
+
 .landing-nav .nav-brand h2 {
   font-family: 'Crimson Pro', serif;
   font-size: 1.5rem;

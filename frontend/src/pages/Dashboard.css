@@ -15,6 +15,10 @@
   transition: background 0.3s ease;
 }
 
+.nav-brand {
+  text-decoration: none;
+}
+
 .nav-brand h2 {
   font-family: 'Crimson Pro', serif;
   font-size: 1.75rem;

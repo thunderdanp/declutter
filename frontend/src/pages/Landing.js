@@ -9,9 +9,9 @@ function Landing() {
   return (
     <div className="landing-container">
       <nav className="landing-nav">
-        <div className="nav-brand">
+        <Link to="/" className="nav-brand">
           <h2>Declutter Assistant</h2>
-        </div>
+        </Link>
         <div className="nav-actions">
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
             {isDark ? '☀️' : '🌙'}
