@@ -94,38 +94,38 @@ function ItemHistory({ setIsAuthenticated }) {
         </div>
 
         <div className="filter-bar">
-          <button 
-            className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
+          <button
+            className={`filter-btn filter-all ${filter === 'all' ? 'active' : ''}`}
             onClick={() => setFilter('all')}
           >
             All Items
           </button>
-          <button 
-            className={`filter-btn ${filter === 'keep' ? 'active' : ''}`}
+          <button
+            className={`filter-btn filter-keep ${filter === 'keep' ? 'active' : ''}`}
             onClick={() => setFilter('keep')}
           >
             Keep
           </button>
-          <button 
-            className={`filter-btn ${filter === 'storage' ? 'active' : ''}`}
+          <button
+            className={`filter-btn filter-storage ${filter === 'storage' ? 'active' : ''}`}
             onClick={() => setFilter('storage')}
           >
             Storage
           </button>
-          <button 
-            className={`filter-btn ${filter === 'sell' ? 'active' : ''}`}
+          <button
+            className={`filter-btn filter-sell ${filter === 'sell' ? 'active' : ''}`}
             onClick={() => setFilter('sell')}
           >
             Sell
           </button>
-          <button 
-            className={`filter-btn ${filter === 'donate' ? 'active' : ''}`}
+          <button
+            className={`filter-btn filter-donate ${filter === 'donate' ? 'active' : ''}`}
             onClick={() => setFilter('donate')}
           >
             Donate
           </button>
-          <button 
-            className={`filter-btn ${filter === 'discard' ? 'active' : ''}`}
+          <button
+            className={`filter-btn filter-discard ${filter === 'discard' ? 'active' : ''}`}
             onClick={() => setFilter('discard')}
           >
             Discard
