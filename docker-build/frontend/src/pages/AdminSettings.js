@@ -68,7 +68,7 @@ function AdminSettings({ setIsAuthenticated }) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setIsAuthenticated(false);
-    navigate('/login');
+    navigate('/');
   };
 
   return (

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import './Admin.css';
 
-function AdminUsers() {
+function AdminUsers({ setIsAuthenticated }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
@@ -82,6 +82,7 @@ function AdminUsers() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setIsAuthenticated(false);
     navigate('/');
   };
 

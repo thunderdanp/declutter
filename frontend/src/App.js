@@ -73,31 +73,31 @@ function App() {
           isAuthenticated ? <Navigate to="/dashboard" /> : <ResetPassword />
         } />
         <Route path="/dashboard" element={
-          isAuthenticated ? <Dashboard /> : <Navigate to="/" />
+          isAuthenticated ? <Dashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/profile" element={
-          isAuthenticated ? <PersonalityProfile /> : <Navigate to="/" />
+          isAuthenticated ? <PersonalityProfile setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/evaluate" element={
-          isAuthenticated ? <EvaluateItem /> : <Navigate to="/" />
+          isAuthenticated ? <EvaluateItem setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/history" element={
-          isAuthenticated ? <ItemHistory /> : <Navigate to="/" />
+          isAuthenticated ? <ItemHistory setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/settings" element={
-          isAuthenticated ? <Settings /> : <Navigate to="/" />
+          isAuthenticated ? <Settings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/items/:id" element={
-          isAuthenticated ? <ItemDetail /> : <Navigate to="/" />
+          isAuthenticated ? <ItemDetail setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/admin" element={
-          isAuthenticated ? <AdminDashboard /> : <Navigate to="/" />
+          isAuthenticated ? <AdminDashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/admin/users" element={
-          isAuthenticated ? <AdminUsers /> : <Navigate to="/" />
+          isAuthenticated ? <AdminUsers setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/admin/settings" element={
-          isAuthenticated ? <AdminSettings /> : <Navigate to="/" />
+          isAuthenticated ? <AdminSettings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
         </Routes>

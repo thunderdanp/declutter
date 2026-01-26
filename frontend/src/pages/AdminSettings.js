@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Admin.css';
 
-function AdminSettings() {
+function AdminSettings({ setIsAuthenticated }) {
   const [settings, setSettings] = useState({
     registration_mode: 'automatic'
   });
@@ -67,6 +67,7 @@ function AdminSettings() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setIsAuthenticated(false);
     navigate('/');
   };
 

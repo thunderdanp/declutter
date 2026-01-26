@@ -4,7 +4,7 @@ import { analyzeItem, generateReasoning, recommendationLabels } from '../utils/r
 import { useTheme } from '../context/ThemeContext';
 import './ItemDetail.css';
 
-function ItemDetail() {
+function ItemDetail({ setIsAuthenticated }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
@@ -15,20 +15,18 @@ function ItemDetail() {
   const [editData, setEditData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
-  const [householdMembers, setHouseholdMembers] = useState([]);
-  const [selectedOwners, setSelectedOwners] = useState([]);
   const { isDark, toggleTheme } = useTheme();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    setIsAuthenticated(false);
+    navigate('/');
   };
 
   useEffect(() => {
     fetchItem();
     fetchProfile();
-    fetchHouseholdMembers();
   }, [id]);
 
   const fetchItem = async () => {
@@ -70,42 +68,6 @@ function ItemDetail() {
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
-  };
-
-  const fetchHouseholdMembers = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/household-members', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setHouseholdMembers(data.members);
-      }
-    } catch (error) {
-      console.error('Error fetching household members:', error);
-    }
-  };
-
-  const handleOwnerToggle = (memberId) => {
-    setSelectedOwners(prev => {
-      if (prev.includes(memberId)) {
-        return prev.filter(id => id !== memberId);
-      } else {
-        return [...prev, memberId];
-      }
-    });
-  };
-
-  const getOwnerNames = (ownerIds) => {
-    if (!ownerIds || ownerIds.length === 0) return null;
-    const names = ownerIds
-      .map(id => householdMembers.find(m => m.id === id)?.name)
-      .filter(Boolean);
-    return names.length > 0 ? names.join(', ') : null;
   };
 
   const handleDelete = async () => {
@@ -161,14 +123,12 @@ function ItemDetail() {
       replace: answers.replace || '',
       space: answers.space || ''
     });
-    setSelectedOwners(item.owner_ids || []);
     setIsEditing(true);
   };
 
   const handleCancel = () => {
     setIsEditing(false);
     setEditData(null);
-    setSelectedOwners([]);
   };
 
   const handleInputChange = (e) => {
@@ -212,8 +172,7 @@ function ItemDetail() {
           category: editData.category,
           recommendation: recommendationType,
           recommendationReasoning: reasoning,
-          answers: JSON.stringify(editData),
-          ownerIds: selectedOwners
+          answers: JSON.stringify(editData)
         })
       });
 
@@ -254,7 +213,6 @@ function ItemDetail() {
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link">My Items</Link>
-          <Link to="/household" className="nav-link">Household</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
@@ -341,25 +299,6 @@ function ItemDetail() {
                   </select>
                 </div>
               </div>
-
-              {householdMembers.length > 0 && (
-                <div className="form-group owner-selection">
-                  <label>Who does this belong to?</label>
-                  <p className="owner-hint">Leave unchecked for shared/household items</p>
-                  <div className="owner-options">
-                    {householdMembers.map(member => (
-                      <label key={member.id} className="owner-option">
-                        <input
-                          type="checkbox"
-                          checked={selectedOwners.includes(member.id)}
-                          onChange={() => handleOwnerToggle(member.id)}
-                        />
-                        <span className="owner-name">{member.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="card">
@@ -534,12 +473,6 @@ function ItemDetail() {
                       <span className="detail-value">{item.category}</span>
                     </div>
                   )}
-                  <div className="detail-row">
-                    <span className="detail-label">Owner(s):</span>
-                    <span className="detail-value">
-                      {getOwnerNames(item.owner_ids) || 'Shared (household)'}
-                    </span>
-                  </div>
                   <div className="detail-row">
                     <span className="detail-label">Evaluated:</span>
                     <span className="detail-value">{formatDate(item.created_at)}</span>

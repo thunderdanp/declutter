@@ -4,7 +4,7 @@ import { analyzeItem, generateReasoning, recommendationLabels } from '../utils/r
 import { useTheme } from '../context/ThemeContext';
 import './ItemDetail.css';
 
-function ItemDetail() {
+function ItemDetail({ setIsAuthenticated }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
@@ -20,6 +20,7 @@ function ItemDetail() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setIsAuthenticated(false);
     navigate('/');
   };
 

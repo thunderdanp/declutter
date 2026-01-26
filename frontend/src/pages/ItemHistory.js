@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './ItemHistory.css';
 
-function ItemHistory() {
+function ItemHistory({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +15,7 @@ function ItemHistory() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setIsAuthenticated(false);
     navigate('/');
   };
 

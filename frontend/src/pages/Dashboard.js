@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './Dashboard.css';
 
-function Dashboard() {
+function Dashboard({ setIsAuthenticated }) {
   const [stats, setStats] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +39,7 @@ function Dashboard() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setIsAuthenticated(false);
     navigate('/');
   };
 

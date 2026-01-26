@@ -3,65 +3,33 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './ItemHistory.css';
 
-function ItemHistory() {
+function ItemHistory({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState(searchParams.get('filter') || 'all');
-  const [ownerFilter, setOwnerFilter] = useState('all');
-  const [householdMembers, setHouseholdMembers] = useState([]);
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    setIsAuthenticated(false);
+    navigate('/');
   };
-
-  useEffect(() => {
-    fetchHouseholdMembers();
-  }, []);
 
   useEffect(() => {
     fetchItems();
-  }, [filter, ownerFilter]);
-
-  const fetchHouseholdMembers = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/household-members', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setHouseholdMembers(data.members);
-      }
-    } catch (error) {
-      console.error('Error fetching household members:', error);
-    }
-  };
+  }, [filter]);
 
   const fetchItems = async () => {
     try {
       const token = localStorage.getItem('token');
-      const params = new URLSearchParams();
-
-      if (filter !== 'all') {
-        params.append('recommendation', filter);
-      }
-
-      if (ownerFilter !== 'all') {
-        params.append('ownerId', ownerFilter);
-      }
-
       let url = '/api/items';
-      if (params.toString()) {
-        url += `?${params.toString()}`;
+      
+      if (filter !== 'all') {
+        url += `?recommendation=${filter}`;
       }
 
       const response = await fetch(url, {
@@ -79,14 +47,6 @@ function ItemHistory() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const getOwnerNames = (ownerIds) => {
-    if (!ownerIds || ownerIds.length === 0) return null;
-    const names = ownerIds
-      .map(id => householdMembers.find(m => m.id === id)?.name)
-      .filter(Boolean);
-    return names.length > 0 ? names.join(', ') : null;
   };
 
   const formatDate = (dateString) => {
@@ -118,7 +78,6 @@ function ItemHistory() {
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link active">My Items</Link>
-          <Link to="/household" className="nav-link">Household</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
@@ -135,61 +94,42 @@ function ItemHistory() {
         </div>
 
         <div className="filter-bar">
-          <div className="filter-group">
-            <button
-              className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
-              onClick={() => setFilter('all')}
-            >
-              All Items
-            </button>
-            <button
-              className={`filter-btn ${filter === 'keep' ? 'active' : ''}`}
-              onClick={() => setFilter('keep')}
-            >
-              Keep
-            </button>
-            <button
-              className={`filter-btn ${filter === 'storage' ? 'active' : ''}`}
-              onClick={() => setFilter('storage')}
-            >
-              Storage
-            </button>
-            <button
-              className={`filter-btn ${filter === 'sell' ? 'active' : ''}`}
-              onClick={() => setFilter('sell')}
-            >
-              Sell
-            </button>
-            <button
-              className={`filter-btn ${filter === 'donate' ? 'active' : ''}`}
-              onClick={() => setFilter('donate')}
-            >
-              Donate
-            </button>
-            <button
-              className={`filter-btn ${filter === 'discard' ? 'active' : ''}`}
-              onClick={() => setFilter('discard')}
-            >
-              Discard
-            </button>
-          </div>
-
-          {householdMembers.length > 0 && (
-            <div className="owner-filter">
-              <label className="owner-filter-label">Owner:</label>
-              <select
-                value={ownerFilter}
-                onChange={(e) => setOwnerFilter(e.target.value)}
-                className="owner-filter-select"
-              >
-                <option value="all">All People</option>
-                <option value="shared">Shared Items</option>
-                {householdMembers.map(member => (
-                  <option key={member.id} value={member.id}>{member.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          <button 
+            className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
+            onClick={() => setFilter('all')}
+          >
+            All Items
+          </button>
+          <button 
+            className={`filter-btn ${filter === 'keep' ? 'active' : ''}`}
+            onClick={() => setFilter('keep')}
+          >
+            Keep
+          </button>
+          <button 
+            className={`filter-btn ${filter === 'storage' ? 'active' : ''}`}
+            onClick={() => setFilter('storage')}
+          >
+            Storage
+          </button>
+          <button 
+            className={`filter-btn ${filter === 'sell' ? 'active' : ''}`}
+            onClick={() => setFilter('sell')}
+          >
+            Sell
+          </button>
+          <button 
+            className={`filter-btn ${filter === 'donate' ? 'active' : ''}`}
+            onClick={() => setFilter('donate')}
+          >
+            Donate
+          </button>
+          <button 
+            className={`filter-btn ${filter === 'discard' ? 'active' : ''}`}
+            onClick={() => setFilter('discard')}
+          >
+            Discard
+          </button>
         </div>
 
         {loading ? (
@@ -223,9 +163,6 @@ function ItemHistory() {
                     )}
                     {item.category && (
                       <span className="meta-tag">🏷️ {item.category}</span>
-                    )}
-                    {getOwnerNames(item.owner_ids) && (
-                      <span className="meta-tag owner-tag">👤 {getOwnerNames(item.owner_ids)}</span>
                     )}
                   </div>
                   <div className="item-footer">

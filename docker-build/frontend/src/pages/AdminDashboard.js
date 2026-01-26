@@ -35,7 +35,7 @@ function AdminDashboard({ setIsAuthenticated }) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setIsAuthenticated(false);
-    navigate('/login');
+    navigate('/');
   };
 
   const formatDate = (dateString) => {

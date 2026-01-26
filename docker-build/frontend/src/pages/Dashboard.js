@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './Dashboard.css';
 
-function Dashboard() {
+function Dashboard({ setIsAuthenticated }) {
   const [stats, setStats] = useState(null);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,7 +39,8 @@ function Dashboard() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    setIsAuthenticated(false);
+    navigate('/');
   };
 
   const getRecommendationCount = (recommendation) => {
@@ -59,7 +60,6 @@ function Dashboard() {
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link">My Items</Link>
-          <Link to="/household" className="nav-link">Household</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>

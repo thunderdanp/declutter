@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './Settings.css';
 
-function Settings() {
+function Settings({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -17,6 +17,7 @@ function Settings() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setIsAuthenticated(false);
     navigate('/');
   };
 

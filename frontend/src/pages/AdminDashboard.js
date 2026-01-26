@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Admin.css';
 
-function AdminDashboard() {
+function AdminDashboard({ setIsAuthenticated }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
@@ -34,6 +34,7 @@ function AdminDashboard() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setIsAuthenticated(false);
     navigate('/');
   };
 

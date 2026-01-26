@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './Settings.css';
 
-function Settings() {
+function Settings({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -17,7 +17,8 @@ function Settings() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    setIsAuthenticated(false);
+    navigate('/');
   };
 
   const handlePasswordChange = async (e) => {
@@ -78,7 +79,6 @@ function Settings() {
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
           <Link to="/history" className="nav-link">My Items</Link>
-          <Link to="/household" className="nav-link">Household</Link>
           <Link to="/settings" className="nav-link active">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>

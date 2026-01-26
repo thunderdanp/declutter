@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './PersonalityProfile.css';
 
-function PersonalityProfile() {
+function PersonalityProfile({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [profile, setProfile] = useState({
     declutterGoal: '',
@@ -26,6 +26,7 @@ function PersonalityProfile() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setIsAuthenticated(false);
     navigate('/');
   };
 
