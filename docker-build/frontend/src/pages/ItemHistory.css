@@ -1,79 +1,52 @@
 .filter-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
   margin-bottom: 2rem;
-  padding: 1.5rem;
-  background: var(--card-bg);
-  border-radius: 16px;
-  box-shadow: 0 4px 16px var(--card-shadow);
-  transition: background 0.3s ease;
-}
-
-.filter-group {
-  display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.owner-filter {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--soft-gray);
-}
-
-.owner-filter-label {
-  font-weight: 500;
-  color: var(--charcoal);
-}
-
-.owner-filter-select {
-  padding: 0.5rem 1rem;
-  border: 2px solid var(--soft-gray);
-  border-radius: 8px;
-  background: var(--card-bg);
-  color: var(--charcoal);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.95rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.owner-filter-select:hover,
-.owner-filter-select:focus {
-  border-color: var(--terracotta);
-  outline: none;
-}
-
-.owner-tag {
-  background: var(--terracotta);
-  color: white !important;
 }
 
 .filter-btn {
-  padding: 0.75rem 1.5rem;
-  border: 2px solid var(--soft-gray);
   background: var(--card-bg);
-  color: var(--charcoal);
-  border-radius: 10px;
+  padding: 1.5rem;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px var(--card-shadow);
+  text-align: center;
   cursor: pointer;
-  transition: all 0.3s ease;
-  font-weight: 500;
+  transition: transform 0.3s ease, background 0.3s ease;
+  border: none;
+  color: var(--charcoal);
+  font-weight: 600;
   font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  border-left: 4px solid var(--soft-gray);
 }
 
 .filter-btn:hover {
-  border-color: var(--terracotta);
-  color: var(--terracotta);
+  transform: translateY(-4px);
 }
 
 .filter-btn.active {
-  background: var(--terracotta);
-  color: white;
-  border-color: var(--terracotta);
+  border-left-color: var(--terracotta);
+  color: var(--terracotta);
 }
+
+.filter-btn.filter-all { border-left-color: var(--terracotta); }
+.filter-btn.filter-all.active { color: var(--terracotta); }
+
+.filter-btn.filter-keep { border-left-color: var(--keep); }
+.filter-btn.filter-keep.active { color: var(--keep); }
+
+.filter-btn.filter-storage { border-left-color: var(--storage); }
+.filter-btn.filter-storage.active { color: var(--storage); }
+
+.filter-btn.filter-sell { border-left-color: var(--sell); }
+.filter-btn.filter-sell.active { color: var(--sell); }
+
+.filter-btn.filter-donate { border-left-color: var(--donate); }
+.filter-btn.filter-donate.active { color: var(--donate); }
+
+.filter-btn.filter-discard { border-left-color: var(--discard); }
+.filter-btn.filter-discard.active { color: var(--discard); }
 
 .items-grid {
   display: grid;
@@ -209,16 +182,7 @@
     grid-template-columns: 1fr;
   }
 
-  .filter-group {
-    justify-content: center;
-  }
-
-  .owner-filter {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .owner-filter-select {
-    width: 100%;
+  .filter-bar {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
