@@ -276,23 +276,15 @@ app.post('/api/auth/forgot-password', [
     // Build reset URL
     const resetUrl = `${process.env.APP_URL || 'http://localhost'}/reset-password/${resetToken}`;
 
-    // Send email
-    await emailTransporter.sendMail({
-      from: process.env.SMTP_FROM_ADDRESS,
-      to: email,
-      subject: 'Declutter Assistant - Password Reset Request',
-      html: `
-        <h2>Password Reset Request</h2>
-        <p>Hi ${user.first_name},</p>
-        <p>You requested to reset your password for your Declutter Assistant account.</p>
-        <p>Click the link below to reset your password:</p>
-        <p><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>This link will expire in 1 hour.</p>
-        <p>If you didn't request this, you can safely ignore this email.</p>
-        <br>
-        <p>- The Declutter Assistant Team</p>
-      `
+    // Send email using template
+    const emailResult = await emailService.sendTemplatedEmail('password_reset', email, {
+      firstName: user.first_name || 'User',
+      resetLink: resetUrl
     });
+
+    if (!emailResult.success) {
+      console.error('Failed to send password reset email:', emailResult.error);
+    }
 
     res.json({ message: 'If an account exists, a reset link has been sent.' });
   } catch (error) {
