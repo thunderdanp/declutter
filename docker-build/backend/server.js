@@ -5,10 +5,26 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const { body, validationResult } = require('express-validator');
 const Anthropic = require('@anthropic-ai/sdk');
+const nodemailer = require('nodemailer');
 const EmailService = require('./emailService');
+
+// Email transporter configuration
+const emailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_SERVER,
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_LOGIN,
+    pass: process.env.SMTP_PASSWORD
+  },
+  tls: {
+    rejectUnauthorized: process.env.SMTP_OPENSSL_VERIFY_MODE === 'peer'
+  }
+});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -108,7 +124,28 @@ app.post('/api/auth/register', [
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { email, password, firstName, lastName } = req.body;
+  const { email, password, firstName, lastName, recaptchaToken } = req.body;
+
+  // Verify reCAPTCHA token
+  if (!recaptchaToken) {
+    return res.status(400).json({ error: 'reCAPTCHA verification required' });
+  }
+
+  try {
+    const recaptchaResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`
+    });
+    const recaptchaData = await recaptchaResponse.json();
+
+    if (!recaptchaData.success) {
+      return res.status(400).json({ error: 'reCAPTCHA verification failed' });
+    }
+  } catch (recaptchaError) {
+    console.error('reCAPTCHA verification error:', recaptchaError);
+    return res.status(500).json({ error: 'reCAPTCHA verification error' });
+  }
 
   try {
     // Check if user exists
@@ -201,6 +238,148 @@ app.post('/api/auth/login', [
   }
 });
 
+// Forgot Password - Request reset link
+app.post('/api/auth/forgot-password', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { email } = req.body;
+
+  try {
+    // Check if user exists
+    const userResult = await pool.query('SELECT id, first_name FROM users WHERE email = $1', [email]);
+
+    // Always return success to prevent email enumeration
+    if (userResult.rows.length === 0) {
+      return res.json({ message: 'If an account exists, a reset link has been sent.' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Generate secure token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+
+    // Invalidate any existing tokens for this user
+    await pool.query('UPDATE password_reset_tokens SET used = TRUE WHERE user_id = $1 AND used = FALSE', [user.id]);
+
+    // Store new token
+    await pool.query(
+      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+      [user.id, resetToken, expiresAt]
+    );
+
+    // Build reset URL
+    const resetUrl = `${process.env.APP_URL || 'http://localhost'}/reset-password/${resetToken}`;
+
+    // Send email
+    await emailTransporter.sendMail({
+      from: process.env.SMTP_FROM_ADDRESS,
+      to: email,
+      subject: 'Declutter Assistant - Password Reset Request',
+      html: `
+        <h2>Password Reset Request</h2>
+        <p>Hi ${user.first_name},</p>
+        <p>You requested to reset your password for your Declutter Assistant account.</p>
+        <p>Click the link below to reset your password:</p>
+        <p><a href="${resetUrl}">${resetUrl}</a></p>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request this, you can safely ignore this email.</p>
+        <br>
+        <p>- The Declutter Assistant Team</p>
+      `
+    });
+
+    res.json({ message: 'If an account exists, a reset link has been sent.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset Password - Set new password
+app.post('/api/auth/reset-password', [
+  body('token').notEmpty(),
+  body('password').isLength({ min: 6 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { token, password } = req.body;
+
+  try {
+    // Find valid token
+    const tokenResult = await pool.query(
+      `SELECT prt.id, prt.user_id FROM password_reset_tokens prt
+       WHERE prt.token = $1 AND prt.used = FALSE AND prt.expires_at > NOW()`,
+      [token]
+    );
+
+    if (tokenResult.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset link' });
+    }
+
+    const resetToken = tokenResult.rows[0];
+
+    // Hash new password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Update user password
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, resetToken.user_id]);
+
+    // Mark token as used
+    await pool.query('UPDATE password_reset_tokens SET used = TRUE WHERE id = $1', [resetToken.id]);
+
+    res.json({ message: 'Password reset successful' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Change Password (authenticated user)
+app.post('/api/auth/change-password', authenticateToken, [
+  body('currentPassword').notEmpty(),
+  body('newPassword').isLength({ min: 6 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    // Get user's current password hash
+    const userResult = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Verify current password
+    const validPassword = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
+    if (!validPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    // Hash and save new password
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newPasswordHash, req.user.userId]);
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Get current user
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
@@ -222,6 +401,73 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get user error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= ROOMS ROUTES =============
+
+// Get user's rooms
+app.get('/api/rooms', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, created_at FROM rooms WHERE user_id = $1 ORDER BY name ASC',
+      [req.user.userId]
+    );
+    res.json({ rooms: result.rows });
+  } catch (error) {
+    console.error('Get rooms error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create a room
+app.post('/api/rooms', authenticateToken, [
+  body('name').trim().notEmpty().isLength({ max: 100 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { name } = req.body;
+
+  try {
+    // Check for duplicate room name for this user
+    const existing = await pool.query(
+      'SELECT id FROM rooms WHERE user_id = $1 AND LOWER(name) = LOWER($2)',
+      [req.user.userId, name]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'A room with this name already exists' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO rooms (user_id, name) VALUES ($1, $2) RETURNING id, name, created_at',
+      [req.user.userId, name]
+    );
+    res.status(201).json({ room: result.rows[0] });
+  } catch (error) {
+    console.error('Create room error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete a room
+app.delete('/api/rooms/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM rooms WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Room not found' });
+    }
+
+    res.json({ message: 'Room deleted successfully' });
+  } catch (error) {
+    console.error('Delete room error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -372,26 +618,132 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
   }
 });
 
+// ============= HOUSEHOLD MEMBERS ROUTES =============
+
+// Get all household members for user
+app.get('/api/household-members', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, relationship, created_at, updated_at FROM household_members WHERE user_id = $1 ORDER BY name ASC',
+      [req.user.userId]
+    );
+    res.json({ members: result.rows });
+  } catch (error) {
+    console.error('Get household members error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create household member
+app.post('/api/household-members', authenticateToken, [
+  body('name').trim().notEmpty().isLength({ max: 100 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { name, relationship } = req.body;
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO household_members (user_id, name, relationship) VALUES ($1, $2, $3) RETURNING *',
+      [req.user.userId, name, relationship || null]
+    );
+    res.status(201).json({ member: result.rows[0] });
+  } catch (error) {
+    console.error('Create household member error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update household member
+app.put('/api/household-members/:id', authenticateToken, [
+  body('name').trim().notEmpty().isLength({ max: 100 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { name, relationship } = req.body;
+
+  try {
+    const result = await pool.query(
+      'UPDATE household_members SET name = $1, relationship = $2 WHERE id = $3 AND user_id = $4 RETURNING *',
+      [name, relationship || null, req.params.id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Household member not found' });
+    }
+
+    res.json({ member: result.rows[0] });
+  } catch (error) {
+    console.error('Update household member error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete household member
+app.delete('/api/household-members/:id', authenticateToken, async (req, res) => {
+  try {
+    const memberId = parseInt(req.params.id);
+
+    // First, remove this member from all items' owner_ids
+    await pool.query(
+      'UPDATE items SET owner_ids = array_remove(owner_ids, $1) WHERE user_id = $2',
+      [memberId, req.user.userId]
+    );
+
+    // Then delete the member
+    const result = await pool.query(
+      'DELETE FROM household_members WHERE id = $1 AND user_id = $2 RETURNING id',
+      [memberId, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Household member not found' });
+    }
+
+    res.json({ message: 'Household member deleted successfully' });
+  } catch (error) {
+    console.error('Delete household member error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ============= ITEM ROUTES =============
 
 // Get all items for user
 app.get('/api/items', authenticateToken, async (req, res) => {
   try {
-    const { status, recommendation } = req.query;
+    const { status, recommendation, ownerId } = req.query;
     let query = 'SELECT * FROM items WHERE user_id = $1';
     const params = [req.user.userId];
+    let paramCount = 1;
 
     if (status) {
-      query += ' AND status = $2';
+      paramCount++;
+      query += ` AND status = $${paramCount}`;
       params.push(status);
     }
 
-    if (recommendation && !status) {
-      query += ' AND recommendation = $2';
+    if (recommendation) {
+      paramCount++;
+      query += ` AND recommendation = $${paramCount}`;
       params.push(recommendation);
-    } else if (recommendation && status) {
-      query += ' AND recommendation = $3';
-      params.push(recommendation);
+    }
+
+    // Filter by owner
+    if (ownerId === 'shared') {
+      // Items with no owners (shared items)
+      query += ' AND (owner_ids IS NULL OR owner_ids = \'{}\')';
+    } else if (ownerId) {
+      // Items belonging to specific owner
+      paramCount++;
+      query += ` AND $${paramCount} = ANY(owner_ids)`;
+      params.push(parseInt(ownerId));
     }
 
     query += ' ORDER BY created_at DESC';
@@ -425,7 +777,7 @@ app.get('/api/items/:id', authenticateToken, async (req, res) => {
 
 // Create item
 app.post('/api/items', authenticateToken, upload.single('image'), async (req, res) => {
-  const { name, description, location, category, recommendation, recommendationReasoning, answers, status } = req.body;
+  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
   if (req.file) {
@@ -434,10 +786,20 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
     console.log('No image file in request or upload failed');
   }
 
+  // Parse ownerIds from JSON string if provided
+  let parsedOwnerIds = [];
+  if (ownerIds) {
+    try {
+      parsedOwnerIds = JSON.parse(ownerIds);
+    } catch (e) {
+      console.error('Error parsing ownerIds:', e);
+    }
+  }
+
   try {
     const result = await pool.query(
-      `INSERT INTO items (user_id, name, description, location, category, image_url, recommendation, recommendation_reasoning, answers, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO items (user_id, name, description, location, category, image_url, recommendation, recommendation_reasoning, answers, status, owner_ids)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
       [
         req.user.userId,
@@ -449,7 +811,8 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
         recommendation || null,
         recommendationReasoning || null,
         answers ? JSON.stringify(JSON.parse(answers)) : null,
-        status || 'pending'
+        status || 'pending',
+        parsedOwnerIds
       ]
     );
 
@@ -462,7 +825,7 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
 
 // Update item
 app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req, res) => {
-  const { name, description, location, category, recommendation, recommendationReasoning, answers, status } = req.body;
+  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
 
   try {
@@ -506,6 +869,19 @@ app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req,
     if (status !== undefined) {
       updates.push(`status = $${paramCount++}`);
       params.push(status);
+    }
+    if (ownerIds !== undefined) {
+      updates.push(`owner_ids = $${paramCount++}`);
+      // Parse ownerIds from JSON string if it's a string
+      let parsedOwnerIds = ownerIds;
+      if (typeof ownerIds === 'string') {
+        try {
+          parsedOwnerIds = JSON.parse(ownerIds);
+        } catch (e) {
+          parsedOwnerIds = [];
+        }
+      }
+      params.push(parsedOwnerIds);
     }
 
     if (updates.length === 0) {
