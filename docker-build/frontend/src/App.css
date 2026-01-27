@@ -48,6 +48,7 @@ body {
   color: var(--charcoal);
   min-height: 100vh;
   overflow-x: hidden;
+  overflow-y: scroll;
   transition: background 0.3s ease, color 0.3s ease;
 }
 
