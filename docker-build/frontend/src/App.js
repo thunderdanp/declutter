@@ -16,6 +16,8 @@ import HouseholdMembers from './pages/HouseholdMembers';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
+import AdminEmailTemplates from './pages/AdminEmailTemplates';
+import AdminAnnouncements from './pages/AdminAnnouncements';
 import './App.css';
 
 function App() {
@@ -102,6 +104,12 @@ function App() {
         } />
         <Route path="/admin/settings" element={
           isAuthenticated ? <AdminSettings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/email-templates" element={
+          isAuthenticated ? <AdminEmailTemplates setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/announcements" element={
+          isAuthenticated ? <AdminAnnouncements setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
         </Routes>
