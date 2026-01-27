@@ -6,6 +6,7 @@ import './ItemHistory.css';
 function ItemHistory({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [items, setItems] = useState([]);
+  const [allItems, setAllItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState(searchParams.get('filter') || 'all');
@@ -23,11 +24,49 @@ function ItemHistory({ setIsAuthenticated }) {
 
   useEffect(() => {
     fetchHouseholdMembers();
+    fetchAllItems();
   }, []);
 
   useEffect(() => {
     fetchItems();
   }, [filter, ownerFilter]);
+
+  const fetchAllItems = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/items', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAllItems(data.items);
+      }
+    } catch (error) {
+      console.error('Error fetching all items:', error);
+    }
+  };
+
+  const getCounts = () => {
+    const counts = {
+      all: allItems.length,
+      keep: 0,
+      storage: 0,
+      sell: 0,
+      donate: 0,
+      discard: 0
+    };
+    allItems.forEach(item => {
+      if (counts[item.recommendation] !== undefined) {
+        counts[item.recommendation]++;
+      }
+    });
+    return counts;
+  };
+
+  const counts = getCounts();
 
   const fetchHouseholdMembers = async () => {
     try {
@@ -140,37 +179,43 @@ function ItemHistory({ setIsAuthenticated }) {
             className={`filter-btn filter-all ${filter === 'all' ? 'active' : ''}`}
             onClick={() => setFilter('all')}
           >
-            All Items
+            <span className="filter-count">{counts.all}</span>
+            <span className="filter-label">All Items</span>
           </button>
           <button
             className={`filter-btn filter-keep ${filter === 'keep' ? 'active' : ''}`}
             onClick={() => setFilter('keep')}
           >
-            Keep
+            <span className="filter-count">{counts.keep}</span>
+            <span className="filter-label">Keep</span>
           </button>
           <button
             className={`filter-btn filter-storage ${filter === 'storage' ? 'active' : ''}`}
             onClick={() => setFilter('storage')}
           >
-            Storage
+            <span className="filter-count">{counts.storage}</span>
+            <span className="filter-label">Storage</span>
           </button>
           <button
             className={`filter-btn filter-sell ${filter === 'sell' ? 'active' : ''}`}
             onClick={() => setFilter('sell')}
           >
-            Sell
+            <span className="filter-count">{counts.sell}</span>
+            <span className="filter-label">Sell</span>
           </button>
           <button
             className={`filter-btn filter-donate ${filter === 'donate' ? 'active' : ''}`}
             onClick={() => setFilter('donate')}
           >
-            Donate
+            <span className="filter-count">{counts.donate}</span>
+            <span className="filter-label">Donate</span>
           </button>
           <button
             className={`filter-btn filter-discard ${filter === 'discard' ? 'active' : ''}`}
             onClick={() => setFilter('discard')}
           >
-            Discard
+            <span className="filter-count">{counts.discard}</span>
+            <span className="filter-label">Discard</span>
           </button>
         </div>
 
