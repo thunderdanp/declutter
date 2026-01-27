@@ -8,6 +8,7 @@ const fs = require('fs').promises;
 const { Pool } = require('pg');
 const { body, validationResult } = require('express-validator');
 const Anthropic = require('@anthropic-ai/sdk');
+const EmailService = require('./emailService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,6 +25,9 @@ if (!fsSync.existsSync(uploadsDir)) {
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://declutter_user:declutter_password@localhost:5432/declutter_db',
 });
+
+// Initialize email service
+const emailService = new EmailService(pool);
 
 // Test database connection
 pool.query('SELECT NOW()', (err, res) => {
@@ -698,6 +702,345 @@ app.put('/api/admin/settings/registration_mode', authenticateToken, requireAdmin
     res.json({ message: 'Setting updated' });
   } catch (error) {
     console.error('Update setting error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= SMTP CONFIGURATION ROUTES =============
+
+// Get SMTP settings
+app.get('/api/admin/smtp', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'smtp_%'"
+    );
+    const settings = {};
+    result.rows.forEach(row => {
+      // Don't expose the password
+      if (row.setting_key === 'smtp_password') {
+        settings[row.setting_key] = row.setting_value ? '••••••••' : '';
+      } else {
+        settings[row.setting_key] = row.setting_value;
+      }
+    });
+    res.json(settings);
+  } catch (error) {
+    console.error('Get SMTP settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Save SMTP settings
+app.put('/api/admin/smtp', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { smtp_host, smtp_port, smtp_user, smtp_password, smtp_from_address } = req.body;
+
+    const settings = [
+      ['smtp_host', smtp_host],
+      ['smtp_port', smtp_port],
+      ['smtp_user', smtp_user],
+      ['smtp_from_address', smtp_from_address]
+    ];
+
+    // Only update password if a new one was provided (not the masked value)
+    if (smtp_password && !smtp_password.includes('•')) {
+      settings.push(['smtp_password', smtp_password]);
+    }
+
+    for (const [key, value] of settings) {
+      await pool.query(
+        'INSERT INTO system_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP',
+        [key, value || '']
+      );
+    }
+
+    res.json({ message: 'SMTP settings saved' });
+  } catch (error) {
+    console.error('Save SMTP settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Test SMTP connection
+app.post('/api/admin/smtp/test', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await emailService.testConnection();
+    res.json(result);
+  } catch (error) {
+    console.error('Test SMTP error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============= EMAIL TEMPLATES ROUTES =============
+
+// Get all email templates
+app.get('/api/admin/email-templates', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM email_templates ORDER BY is_system DESC, name ASC');
+    res.json({ templates: result.rows });
+  } catch (error) {
+    console.error('Get templates error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get single email template
+app.get('/api/admin/email-templates/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM email_templates WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    res.json({ template: result.rows[0] });
+  } catch (error) {
+    console.error('Get template error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create email template
+app.post('/api/admin/email-templates', authenticateToken, requireAdmin, [
+  body('name').trim().notEmpty(),
+  body('subject').trim().notEmpty(),
+  body('body').trim().notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { name, subject, body, description } = req.body;
+    const result = await pool.query(
+      'INSERT INTO email_templates (name, subject, body, description) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, subject, body, description || null]
+    );
+    res.status(201).json({ template: result.rows[0] });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Template name already exists' });
+    }
+    console.error('Create template error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update email template
+app.put('/api/admin/email-templates/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { subject, body, description } = req.body;
+    const result = await pool.query(
+      'UPDATE email_templates SET subject = $1, body = $2, description = $3 WHERE id = $4 RETURNING *',
+      [subject, body, description || null, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    res.json({ template: result.rows[0] });
+  } catch (error) {
+    console.error('Update template error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete email template
+app.delete('/api/admin/email-templates/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Check if it's a system template
+    const checkResult = await pool.query('SELECT is_system FROM email_templates WHERE id = $1', [req.params.id]);
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    if (checkResult.rows[0].is_system) {
+      return res.status(400).json({ error: 'Cannot delete system templates' });
+    }
+
+    await pool.query('DELETE FROM email_templates WHERE id = $1', [req.params.id]);
+    res.json({ message: 'Template deleted' });
+  } catch (error) {
+    console.error('Delete template error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= ANNOUNCEMENTS ROUTES =============
+
+// Get all announcements
+app.get('/api/admin/announcements', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT a.*, u.first_name, u.last_name, u.email as creator_email
+      FROM announcements a
+      LEFT JOIN users u ON a.created_by = u.id
+      ORDER BY a.created_at DESC
+    `);
+    res.json({ announcements: result.rows });
+  } catch (error) {
+    console.error('Get announcements error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get single announcement
+app.get('/api/admin/announcements/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT a.*, u.first_name, u.last_name
+      FROM announcements a
+      LEFT JOIN users u ON a.created_by = u.id
+      WHERE a.id = $1
+    `, [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+    res.json({ announcement: result.rows[0] });
+  } catch (error) {
+    console.error('Get announcement error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create announcement
+app.post('/api/admin/announcements', authenticateToken, requireAdmin, [
+  body('title').trim().notEmpty(),
+  body('content').trim().notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { title, content } = req.body;
+    const result = await pool.query(
+      'INSERT INTO announcements (title, content, created_by) VALUES ($1, $2, $3) RETURNING *',
+      [title, content, req.user.userId]
+    );
+    res.status(201).json({ announcement: result.rows[0] });
+  } catch (error) {
+    console.error('Create announcement error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update announcement
+app.put('/api/admin/announcements/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { title, content } = req.body;
+
+    // Check if already sent
+    const checkResult = await pool.query('SELECT sent_at FROM announcements WHERE id = $1', [req.params.id]);
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+    if (checkResult.rows[0].sent_at) {
+      return res.status(400).json({ error: 'Cannot edit an announcement that has already been sent' });
+    }
+
+    const result = await pool.query(
+      'UPDATE announcements SET title = $1, content = $2 WHERE id = $3 RETURNING *',
+      [title, content, req.params.id]
+    );
+    res.json({ announcement: result.rows[0] });
+  } catch (error) {
+    console.error('Update announcement error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete announcement
+app.delete('/api/admin/announcements/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM announcements WHERE id = $1 RETURNING id', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+    res.json({ message: 'Announcement deleted' });
+  } catch (error) {
+    console.error('Delete announcement error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Send announcement to all users
+app.post('/api/admin/announcements/:id/send', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Check if already sent
+    const checkResult = await pool.query('SELECT sent_at FROM announcements WHERE id = $1', [req.params.id]);
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Announcement not found' });
+    }
+    if (checkResult.rows[0].sent_at) {
+      return res.status(400).json({ error: 'Announcement has already been sent' });
+    }
+
+    const result = await emailService.sendAnnouncement(req.params.id);
+    if (result.success) {
+      res.json({
+        message: `Announcement sent to ${result.sentCount} users`,
+        sentCount: result.sentCount,
+        totalUsers: result.totalUsers
+      });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (error) {
+    console.error('Send announcement error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= NOTIFICATION PREFERENCES ROUTES =============
+
+// Get user's notification preferences
+app.get('/api/notification-preferences', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM notification_preferences WHERE user_id = $1',
+      [req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      // Return default preferences
+      res.json({
+        preferences: {
+          announcements: true,
+          account_updates: true,
+          item_recommendations: true,
+          weekly_digest: false
+        }
+      });
+    } else {
+      res.json({ preferences: result.rows[0] });
+    }
+  } catch (error) {
+    console.error('Get notification preferences error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user's notification preferences
+app.put('/api/notification-preferences', authenticateToken, async (req, res) => {
+  try {
+    const { announcements, account_updates, item_recommendations, weekly_digest } = req.body;
+
+    const result = await pool.query(`
+      INSERT INTO notification_preferences (user_id, announcements, account_updates, item_recommendations, weekly_digest)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id)
+      DO UPDATE SET
+        announcements = $2,
+        account_updates = $3,
+        item_recommendations = $4,
+        weekly_digest = $5,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `, [req.user.userId, announcements, account_updates, item_recommendations, weekly_digest]);
+
+    res.json({ preferences: result.rows[0] });
+  } catch (error) {
+    console.error('Update notification preferences error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

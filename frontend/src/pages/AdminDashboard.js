@@ -55,6 +55,8 @@ function AdminDashboard({ setIsAuthenticated }) {
         <div className="nav-links">
           <Link to="/admin" className="nav-link active">Admin Dashboard</Link>
           <Link to="/admin/users" className="nav-link">Users</Link>
+          <Link to="/admin/email-templates" className="nav-link">Email Templates</Link>
+          <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>
           <Link to="/dashboard" className="nav-link">User View</Link>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
@@ -135,10 +137,22 @@ function AdminDashboard({ setIsAuthenticated }) {
                 <p>View, approve, and manage user accounts</p>
               </Link>
 
+              <Link to="/admin/email-templates" className="admin-action-card">
+                <div className="action-icon">📧</div>
+                <h3>Email Templates</h3>
+                <p>Configure and customize email templates</p>
+              </Link>
+
+              <Link to="/admin/announcements" className="admin-action-card">
+                <div className="action-icon">📢</div>
+                <h3>Announcements</h3>
+                <p>Send announcements to all users</p>
+              </Link>
+
               <Link to="/admin/settings" className="admin-action-card">
                 <div className="action-icon">⚙️</div>
                 <h3>System Settings</h3>
-                <p>Configure registration and email settings</p>
+                <p>Configure registration and SMTP settings</p>
               </Link>
             </div>
           </>
