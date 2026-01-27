@@ -59,7 +59,7 @@ function Dashboard({ setIsAuthenticated }) {
           <Link to="/dashboard" className="nav-link active">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
-          <Link to="/history" className="nav-link">My Items</Link>
+          <Link to="/my_items" className="nav-link">My Items</Link>
           <Link to="/household" className="nav-link">Household</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
@@ -81,32 +81,32 @@ function Dashboard({ setIsAuthenticated }) {
         ) : (
           <>
             <div className="stats-grid">
-              <Link to="/history" className="stat-card stat-total">
+              <Link to="/my_items" className="stat-card stat-total">
                 <div className="stat-number">{stats?.total || 0}</div>
                 <div className="stat-label">Total Items Evaluated</div>
               </Link>
 
-              <Link to="/history?filter=keep" className="stat-card stat-keep">
+              <Link to="/my_items?filter=keep" className="stat-card stat-keep">
                 <div className="stat-number">{getRecommendationCount('keep')}</div>
                 <div className="stat-label">Keep</div>
               </Link>
 
-              <Link to="/history?filter=storage" className="stat-card stat-storage">
+              <Link to="/my_items?filter=storage" className="stat-card stat-storage">
                 <div className="stat-number">{getRecommendationCount('storage')}</div>
                 <div className="stat-label">Storage</div>
               </Link>
 
-              <Link to="/history?filter=sell" className="stat-card stat-sell">
+              <Link to="/my_items?filter=sell" className="stat-card stat-sell">
                 <div className="stat-number">{getRecommendationCount('sell')}</div>
                 <div className="stat-label">Sell</div>
               </Link>
 
-              <Link to="/history?filter=donate" className="stat-card stat-donate">
+              <Link to="/my_items?filter=donate" className="stat-card stat-donate">
                 <div className="stat-number">{getRecommendationCount('donate')}</div>
                 <div className="stat-label">Donate</div>
               </Link>
 
-              <Link to="/history?filter=discard" className="stat-card stat-discard">
+              <Link to="/my_items?filter=discard" className="stat-card stat-discard">
                 <div className="stat-number">{getRecommendationCount('discard')}</div>
                 <div className="stat-label">Discard</div>
               </Link>
@@ -127,7 +127,7 @@ function Dashboard({ setIsAuthenticated }) {
                   <p>Refine your preferences and decision-making style</p>
                 </Link>
 
-                <Link to="/history" className="action-card">
+                <Link to="/my_items" className="action-card">
                   <div className="action-icon">📋</div>
                   <h3>My Items</h3>
                   <p>Review all your evaluated items</p>

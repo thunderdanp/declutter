@@ -82,7 +82,7 @@ function App() {
         <Route path="/evaluate" element={
           isAuthenticated ? <EvaluateItem setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
-        <Route path="/history" element={
+        <Route path="/my_items" element={
           isAuthenticated ? <ItemHistory setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/settings" element={
