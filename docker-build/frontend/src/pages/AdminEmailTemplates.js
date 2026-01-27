@@ -12,7 +12,8 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
     name: '',
     subject: '',
     body: '',
-    description: ''
+    description: '',
+    is_system: false
   });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -50,7 +51,8 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
       name: '',
       subject: '',
       body: '',
-      description: ''
+      description: '',
+      is_system: false
     });
   };
 
@@ -62,7 +64,8 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
       name: template.name,
       subject: template.subject,
       body: template.body,
-      description: template.description || ''
+      description: template.description || '',
+      is_system: template.is_system || false
     });
   };
 
@@ -74,7 +77,8 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
       name: '',
       subject: '',
       body: '',
-      description: ''
+      description: '',
+      is_system: false
     });
   };
 
@@ -235,6 +239,20 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="is_system">Template Type</label>
+                    <select
+                      id="is_system"
+                      className="form-control"
+                      value={formData.is_system ? 'system' : 'custom'}
+                      onChange={(e) => setFormData({ ...formData, is_system: e.target.value === 'system' })}
+                    >
+                      <option value="custom">Custom</option>
+                      <option value="system">System</option>
+                    </select>
+                    <p className="form-help">System templates cannot be deleted</p>
                   </div>
 
                   <div className="settings-actions">
