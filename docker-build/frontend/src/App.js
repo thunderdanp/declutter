@@ -12,6 +12,7 @@ import PersonalityProfile from './pages/PersonalityProfile';
 import EvaluateItem from './pages/EvaluateItem';
 import ItemHistory from './pages/ItemHistory';
 import ItemDetail from './pages/ItemDetail';
+import HouseholdMembers from './pages/HouseholdMembers';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
@@ -86,6 +87,9 @@ function App() {
         } />
         <Route path="/settings" element={
           isAuthenticated ? <Settings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/household" element={
+          isAuthenticated ? <HouseholdMembers setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/items/:id" element={
           isAuthenticated ? <ItemDetail setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />

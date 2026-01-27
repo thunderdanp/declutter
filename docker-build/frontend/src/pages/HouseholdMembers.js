@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './HouseholdMembers.css';
 
-function HouseholdMembers() {
+function HouseholdMembers({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -28,7 +28,8 @@ function HouseholdMembers() {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    setIsAuthenticated(false);
+    navigate('/');
   };
 
   useEffect(() => {
