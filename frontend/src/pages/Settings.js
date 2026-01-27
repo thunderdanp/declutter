@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './Settings.css';
@@ -11,8 +11,41 @@ function Settings({ setIsAuthenticated }) {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [notificationPrefs, setNotificationPrefs] = useState({
+    announcements: true,
+    account_updates: true,
+    item_recommendations: true,
+    weekly_digest: false
+  });
+  const [savingNotifications, setSavingNotifications] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState('');
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
+
+  useEffect(() => {
+    fetchNotificationPreferences();
+  }, []);
+
+  const fetchNotificationPreferences = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/notification-preferences', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setNotificationPrefs({
+          announcements: data.preferences.announcements ?? true,
+          account_updates: data.preferences.account_updates ?? true,
+          item_recommendations: data.preferences.item_recommendations ?? true,
+          weekly_digest: data.preferences.weekly_digest ?? false
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching notification preferences:', error);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -68,6 +101,41 @@ function Settings({ setIsAuthenticated }) {
     }
   };
 
+  const handleNotificationChange = (key) => {
+    setNotificationPrefs(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const handleSaveNotifications = async () => {
+    setSavingNotifications(true);
+    setNotificationMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/notification-preferences', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(notificationPrefs)
+      });
+
+      if (response.ok) {
+        setNotificationMessage('Notification preferences saved!');
+        setTimeout(() => setNotificationMessage(''), 3000);
+      } else {
+        setNotificationMessage('Failed to save preferences');
+      }
+    } catch (err) {
+      setNotificationMessage('Network error. Please try again.');
+    } finally {
+      setSavingNotifications(false);
+    }
+  };
+
   return (
     <div className="dashboard-container">
       <nav className="dashboard-nav">
@@ -82,7 +150,7 @@ function Settings({ setIsAuthenticated }) {
           <Link to="/settings" className="nav-link active">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
-            {isDark ? '☀️' : '🌙'}
+            {isDark ? '\u2600\uFE0F' : '\uD83C\uDF19'}
           </button>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
@@ -103,9 +171,82 @@ function Settings({ setIsAuthenticated }) {
                 <p>Switch between light and dark themes</p>
               </div>
               <button onClick={toggleTheme} className="btn btn-secondary">
-                {isDark ? '☀️ Light Mode' : '🌙 Dark Mode'}
+                {isDark ? '\u2600\uFE0F Light Mode' : '\uD83C\uDF19 Dark Mode'}
               </button>
             </div>
+          </div>
+
+          <div className="card">
+            <h2 className="section-heading">Email Notifications</h2>
+            <div className="setting-item">
+              <div className="setting-info">
+                <h3>Announcements</h3>
+                <p>Receive important announcements and updates</p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs.announcements}
+                  onChange={() => handleNotificationChange('announcements')}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+            <div className="setting-item">
+              <div className="setting-info">
+                <h3>Account Updates</h3>
+                <p>Get notified about account-related changes</p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs.account_updates}
+                  onChange={() => handleNotificationChange('account_updates')}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+            <div className="setting-item">
+              <div className="setting-info">
+                <h3>Item Recommendations</h3>
+                <p>Receive updates when items are analyzed</p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs.item_recommendations}
+                  onChange={() => handleNotificationChange('item_recommendations')}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+            <div className="setting-item">
+              <div className="setting-info">
+                <h3>Weekly Digest</h3>
+                <p>Get a weekly summary of your decluttering progress</p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={notificationPrefs.weekly_digest}
+                  onChange={() => handleNotificationChange('weekly_digest')}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+            {notificationMessage && (
+              <div className={`${notificationMessage.includes('saved') ? 'success-message' : 'error-message'}`}>
+                {notificationMessage}
+              </div>
+            )}
+            <button
+              onClick={handleSaveNotifications}
+              className="btn btn-primary"
+              disabled={savingNotifications}
+              style={{ marginTop: '1rem' }}
+            >
+              {savingNotifications ? 'Saving...' : 'Save Notification Preferences'}
+            </button>
           </div>
 
           <div className="card">
