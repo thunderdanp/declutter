@@ -7,6 +7,7 @@ COPY backend/package*.json ./
 RUN npm install --production
 
 COPY backend/server.js ./
+COPY backend/emailService.js ./
 COPY backend/init.sql ./
 
 # Frontend build stage
