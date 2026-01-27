@@ -1,5 +1,5 @@
 .evaluate-form {
-  animation: fadeInUp 0.6s ease-out;
+  animation: fadeInUp 0.5s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s both;
 }
 
 .form-row {
@@ -58,7 +58,7 @@
   border: 2px solid var(--soft-gray);
   border-radius: 10px;
   text-align: center;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
   font-weight: 500;
 }
 
@@ -66,7 +66,7 @@
   background: var(--terracotta);
   color: white;
   border-color: var(--terracotta);
-  transform: scale(1.05);
+  transform: scale(1.02);
 }
 
 .radio-option:hover span {
@@ -179,7 +179,7 @@
 }
 
 .result-card {
-  animation: fadeInUp 0.6s ease-out;
+  animation: fadeInUp 0.5s cubic-bezier(0.25, 0.1, 0.25, 1) both;
 }
 
 .recommendation-display {

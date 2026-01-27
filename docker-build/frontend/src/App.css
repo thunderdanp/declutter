@@ -91,6 +91,7 @@ body::before {
   padding: 2rem;
   position: relative;
   z-index: 1;
+  animation: pageEnter 0.5s cubic-bezier(0.25, 0.1, 0.25, 1) both;
 }
 
 .page-header {
@@ -209,7 +210,7 @@ body::before {
 @keyframes fadeInDown {
   from {
     opacity: 0;
-    transform: translateY(-20px);
+    transform: translateY(-10px);
   }
   to {
     opacity: 1;
@@ -220,7 +221,27 @@ body::before {
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
