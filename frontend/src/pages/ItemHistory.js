@@ -142,7 +142,7 @@ function ItemHistory({ setIsAuthenticated }) {
             <h2>No Items Yet</h2>
             <p>Start evaluating items to see them here</p>
             <Link to="/evaluate" className="btn btn-primary">
-              Evaluate Your First Item
+              Evaluate an Item
             </Link>
           </div>
         ) : (
