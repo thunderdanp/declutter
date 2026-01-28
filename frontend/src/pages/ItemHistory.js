@@ -7,6 +7,7 @@ import './ItemHistory.css';
 function ItemHistory({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [items, setItems] = useState([]);
+  const [allItems, setAllItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState(searchParams.get('filter') || 'all');
@@ -22,19 +23,21 @@ function ItemHistory({ setIsAuthenticated }) {
   };
 
   useEffect(() => {
-    fetchItems();
-  }, [filter]);
+    fetchAllItems();
+  }, []);
 
-  const fetchItems = async () => {
+  useEffect(() => {
+    if (filter === 'all') {
+      setItems(allItems);
+    } else {
+      setItems(allItems.filter(item => item.recommendation === filter));
+    }
+  }, [filter, allItems]);
+
+  const fetchAllItems = async () => {
     try {
       const token = localStorage.getItem('token');
-      let url = '/api/items';
-      
-      if (filter !== 'all') {
-        url += `?recommendation=${filter}`;
-      }
-
-      const response = await fetch(url, {
+      const response = await fetch('/api/items', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -42,6 +45,7 @@ function ItemHistory({ setIsAuthenticated }) {
 
       if (response.ok) {
         const data = await response.json();
+        setAllItems(data.items);
         setItems(data.items);
       }
     } catch (error) {
@@ -49,6 +53,11 @@ function ItemHistory({ setIsAuthenticated }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const getCount = (recommendation) => {
+    if (recommendation === 'all') return allItems.length;
+    return allItems.filter(item => item.recommendation === recommendation).length;
   };
 
   const formatDate = (dateString) => {
@@ -100,37 +109,37 @@ function ItemHistory({ setIsAuthenticated }) {
             className={`filter-btn filter-all ${filter === 'all' ? 'active' : ''}`}
             onClick={() => setFilter('all')}
           >
-            All Items
+            All Items ({getCount('all')})
           </button>
           <button
             className={`filter-btn filter-keep ${filter === 'keep' ? 'active' : ''}`}
             onClick={() => setFilter('keep')}
           >
-            Keep
+            Keep ({getCount('keep')})
           </button>
           <button
             className={`filter-btn filter-storage ${filter === 'storage' ? 'active' : ''}`}
             onClick={() => setFilter('storage')}
           >
-            Storage
+            Storage ({getCount('storage')})
           </button>
           <button
             className={`filter-btn filter-sell ${filter === 'sell' ? 'active' : ''}`}
             onClick={() => setFilter('sell')}
           >
-            Sell
+            Sell ({getCount('sell')})
           </button>
           <button
             className={`filter-btn filter-donate ${filter === 'donate' ? 'active' : ''}`}
             onClick={() => setFilter('donate')}
           >
-            Donate
+            Donate ({getCount('donate')})
           </button>
           <button
             className={`filter-btn filter-discard ${filter === 'discard' ? 'active' : ''}`}
             onClick={() => setFilter('discard')}
           >
-            Discard
+            Discard ({getCount('discard')})
           </button>
         </div>
 
