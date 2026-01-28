@@ -277,6 +277,12 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
   }
 
   try {
+    // Fetch categories from database for the prompt
+    const categoriesResult = await pool.query(
+      'SELECT slug FROM categories ORDER BY sort_order ASC, name ASC'
+    );
+    const categoryList = categoriesResult.rows.map(c => c.slug).join(', ');
+
     // Read the uploaded image file
     const imageBuffer = await fs.readFile(req.file.path);
     const base64Image = imageBuffer.toString('base64');
@@ -312,7 +318,7 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
 {
   "name": "A brief, clear name for the item (e.g., 'Vintage Record Player', 'Winter Coat', 'Kitchen Blender')",
   "description": "A detailed description of the item including its appearance, condition, and any notable features (2-3 sentences)",
-  "category": "One of these categories: clothing, books, electronics, kitchen, decor, furniture, toys, tools, or other"
+  "category": "One of these categories: ${categoryList}"
 }
 
 Be specific and descriptive. If multiple items are visible, focus on the main/central item.`
@@ -344,10 +350,12 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
       });
     }
 
-    // Validate the category
-    const validCategories = ['clothing', 'books', 'electronics', 'kitchen', 'decor', 'furniture', 'toys', 'tools', 'other'];
-    if (!validCategories.includes(analysisResult.category)) {
-      analysisResult.category = 'other';
+    // Validate the category against database
+    const validSlugs = categoriesResult.rows.map(c => c.slug.toLowerCase());
+    if (!validSlugs.includes(analysisResult.category?.toLowerCase())) {
+      // Get default category slug
+      const defaultResult = await pool.query('SELECT slug FROM categories WHERE is_default = true');
+      analysisResult.category = defaultResult.rows.length > 0 ? defaultResult.rows[0].slug : 'other';
     }
 
     res.json({
@@ -578,6 +586,21 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= CATEGORIES ROUTES =============
+
+// Get all categories (public - for dropdowns)
+app.get('/api/categories', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, slug, display_name, icon, color, sort_order, is_default FROM categories ORDER BY sort_order ASC, name ASC'
+    );
+    res.json({ categories: result.rows });
+  } catch (error) {
+    console.error('Get categories error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -987,6 +1010,221 @@ app.post('/api/admin/announcements/:id/send', authenticateToken, requireAdmin, a
     }
   } catch (error) {
     console.error('Send announcement error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= ADMIN CATEGORIES ROUTES =============
+
+// Get all categories with item counts (admin)
+app.get('/api/admin/categories', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT c.*, COUNT(i.id) as item_count
+      FROM categories c
+      LEFT JOIN items i ON LOWER(i.category) = LOWER(c.slug)
+      GROUP BY c.id
+      ORDER BY c.sort_order ASC, c.name ASC
+    `);
+    res.json({ categories: result.rows });
+  } catch (error) {
+    console.error('Get admin categories error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get single category (admin)
+app.get('/api/admin/categories/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM categories WHERE id = $1',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    res.json({ category: result.rows[0] });
+  } catch (error) {
+    console.error('Get category error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create category (admin)
+app.post('/api/admin/categories', authenticateToken, requireAdmin, [
+  body('name').trim().notEmpty(),
+  body('display_name').trim().notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { name, display_name, icon, color, sort_order, is_default } = req.body;
+    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+    // If setting as default, unset other defaults
+    if (is_default) {
+      await pool.query('UPDATE categories SET is_default = false WHERE is_default = true');
+    }
+
+    const result = await pool.query(
+      `INSERT INTO categories (name, slug, display_name, icon, color, sort_order, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [name, slug, display_name, icon || null, color || null, sort_order || 0, is_default || false]
+    );
+    res.status(201).json({ category: result.rows[0] });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Category name or slug already exists' });
+    }
+    console.error('Create category error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update category (admin)
+app.put('/api/admin/categories/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { name, display_name, icon, color, sort_order, is_default } = req.body;
+    const slug = name ? name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') : undefined;
+
+    // Get current category to check old slug for item updates
+    const currentResult = await pool.query('SELECT slug FROM categories WHERE id = $1', [req.params.id]);
+    if (currentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    const oldSlug = currentResult.rows[0].slug;
+
+    // If setting as default, unset other defaults
+    if (is_default) {
+      await pool.query('UPDATE categories SET is_default = false WHERE is_default = true AND id != $1', [req.params.id]);
+    }
+
+    const result = await pool.query(
+      `UPDATE categories SET
+        name = COALESCE($1, name),
+        slug = COALESCE($2, slug),
+        display_name = COALESCE($3, display_name),
+        icon = COALESCE($4, icon),
+        color = COALESCE($5, color),
+        sort_order = COALESCE($6, sort_order),
+        is_default = COALESCE($7, is_default)
+       WHERE id = $8 RETURNING *`,
+      [name, slug, display_name, icon, color, sort_order, is_default, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    // Update items if slug changed
+    if (slug && slug !== oldSlug) {
+      await pool.query(
+        'UPDATE items SET category = $1 WHERE LOWER(category) = LOWER($2)',
+        [slug, oldSlug]
+      );
+    }
+
+    res.json({ category: result.rows[0] });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Category name or slug already exists' });
+    }
+    console.error('Update category error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete category (admin) - moves items to default category
+app.delete('/api/admin/categories/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Get the category to delete
+    const categoryResult = await pool.query('SELECT * FROM categories WHERE id = $1', [req.params.id]);
+    if (categoryResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    const category = categoryResult.rows[0];
+
+    // Cannot delete the default category
+    if (category.is_default) {
+      return res.status(400).json({ error: 'Cannot delete the default category' });
+    }
+
+    // Get the default category
+    const defaultResult = await pool.query('SELECT slug FROM categories WHERE is_default = true');
+    const defaultSlug = defaultResult.rows.length > 0 ? defaultResult.rows[0].slug : 'other';
+
+    // Move items to default category
+    await pool.query(
+      'UPDATE items SET category = $1 WHERE LOWER(category) = LOWER($2)',
+      [defaultSlug, category.slug]
+    );
+
+    // Delete the category
+    await pool.query('DELETE FROM categories WHERE id = $1', [req.params.id]);
+
+    res.json({ message: 'Category deleted successfully', movedToCategory: defaultSlug });
+  } catch (error) {
+    console.error('Delete category error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Merge categories (admin) - merge source into target
+app.post('/api/admin/categories/merge', authenticateToken, requireAdmin, [
+  body('sourceId').isInt(),
+  body('targetId').isInt()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { sourceId, targetId } = req.body;
+
+    if (sourceId === targetId) {
+      return res.status(400).json({ error: 'Source and target categories must be different' });
+    }
+
+    // Get both categories
+    const sourceResult = await pool.query('SELECT * FROM categories WHERE id = $1', [sourceId]);
+    const targetResult = await pool.query('SELECT * FROM categories WHERE id = $1', [targetId]);
+
+    if (sourceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Source category not found' });
+    }
+    if (targetResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Target category not found' });
+    }
+
+    const sourceCategory = sourceResult.rows[0];
+    const targetCategory = targetResult.rows[0];
+
+    // Cannot merge default category into another
+    if (sourceCategory.is_default) {
+      return res.status(400).json({ error: 'Cannot merge the default category' });
+    }
+
+    // Move all items from source to target
+    const updateResult = await pool.query(
+      'UPDATE items SET category = $1 WHERE LOWER(category) = LOWER($2)',
+      [targetCategory.slug, sourceCategory.slug]
+    );
+
+    // Delete source category
+    await pool.query('DELETE FROM categories WHERE id = $1', [sourceId]);
+
+    res.json({
+      message: 'Categories merged successfully',
+      itemsMoved: updateResult.rowCount,
+      targetCategory: targetCategory
+    });
+  } catch (error) {
+    console.error('Merge categories error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

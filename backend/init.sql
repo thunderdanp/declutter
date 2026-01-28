@@ -121,7 +121,36 @@ Best regards,
 The Declutter Team', 'Template for admin announcements', true)
 ON CONFLICT (name) DO NOTHING;
 
+-- Categories table
+CREATE TABLE IF NOT EXISTS categories (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) UNIQUE NOT NULL,
+    slug VARCHAR(50) UNIQUE NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    icon VARCHAR(50),
+    color VARCHAR(7),
+    sort_order INTEGER DEFAULT 0,
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed default categories
+INSERT INTO categories (name, slug, display_name, icon, color, sort_order, is_default) VALUES
+('Clothing', 'clothing', 'Clothing', '👕', '#9C27B0', 1, false),
+('Books', 'books', 'Books', '📚', '#795548', 2, false),
+('Electronics', 'electronics', 'Electronics', '💻', '#2196F3', 3, false),
+('Kitchen', 'kitchen', 'Kitchen Items', '🍳', '#FF9800', 4, false),
+('Decor', 'decor', 'Decor', '🖼️', '#E91E63', 5, false),
+('Furniture', 'furniture', 'Furniture', '🛋️', '#607D8B', 6, false),
+('Toys', 'toys', 'Toys', '🧸', '#FFEB3B', 7, false),
+('Tools', 'tools', 'Tools', '🔧', '#9E9E9E', 8, false),
+('Other', 'other', 'Other', '📦', '#78909C', 99, true)
+ON CONFLICT (slug) DO NOTHING;
+
 -- Create indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+CREATE INDEX IF NOT EXISTS idx_categories_sort_order ON categories(sort_order);
 CREATE INDEX idx_items_user_id ON items(user_id);
 CREATE INDEX idx_items_status ON items(status);
 CREATE INDEX idx_items_recommendation ON items(recommendation);
@@ -158,4 +187,8 @@ CREATE TRIGGER update_announcements_updated_at BEFORE UPDATE ON announcements
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_notification_preferences_updated_at BEFORE UPDATE ON notification_preferences
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_categories_updated_at ON categories;
+CREATE TRIGGER update_categories_updated_at BEFORE UPDATE ON categories
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

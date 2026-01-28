@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
+import { CategoryProvider } from './context/CategoryContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -17,6 +18,7 @@ import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
 import AdminEmailTemplates from './pages/AdminEmailTemplates';
 import AdminAnnouncements from './pages/AdminAnnouncements';
+import AdminCategories from './pages/AdminCategories';
 import './App.css';
 
 function App() {
@@ -60,8 +62,9 @@ function App() {
 
   return (
     <ThemeProvider>
-      <Router>
-        <Routes>
+      <CategoryProvider>
+        <Router>
+          <Routes>
         <Route path="/login" element={
           isAuthenticated ? <Navigate to="/dashboard" /> : <Login setIsAuthenticated={setIsAuthenticated} />
         } />
@@ -107,9 +110,13 @@ function App() {
         <Route path="/admin/announcements" element={
           isAuthenticated ? <AdminAnnouncements setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
+        <Route path="/admin/categories" element={
+          isAuthenticated ? <AdminCategories setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
         <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
-        </Routes>
-      </Router>
+          </Routes>
+        </Router>
+      </CategoryProvider>
     </ThemeProvider>
   );
 }

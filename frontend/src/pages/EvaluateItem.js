@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { analyzeItem, generateReasoning, recommendationLabels } from '../utils/recommendationEngine';
 import { useTheme } from '../context/ThemeContext';
+import CategorySelect from '../components/CategorySelect';
 import './EvaluateItem.css';
 
 function EvaluateItem({ setIsAuthenticated }) {
@@ -446,18 +447,11 @@ function EvaluateItem({ setIsAuthenticated }) {
 
               <div className="form-group">
                 <label>Category</label>
-                <select name="category" value={formData.category} onChange={handleChange}>
-                  <option value="">Select category...</option>
-                  <option value="clothing">Clothing</option>
-                  <option value="books">Books</option>
-                  <option value="electronics">Electronics</option>
-                  <option value="kitchen">Kitchen Items</option>
-                  <option value="decor">Decor</option>
-                  <option value="furniture">Furniture</option>
-                  <option value="toys">Toys</option>
-                  <option value="tools">Tools</option>
-                  <option value="other">Other</option>
-                </select>
+                <CategorySelect
+                  name="category"
+                  value={formData.category}
+                  onChange={handleChange}
+                />
               </div>
             </div>
           </div>

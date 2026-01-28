@@ -157,6 +157,7 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
         <div className="nav-links">
           <Link to="/admin" className="nav-link">Admin Dashboard</Link>
           <Link to="/admin/users" className="nav-link">Users</Link>
+          <Link to="/admin/categories" className="nav-link">Categories</Link>
           <Link to="/admin/email-templates" className="nav-link active">Email Templates</Link>
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>

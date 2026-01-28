@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useCategories } from '../context/CategoryContext';
 import './ItemHistory.css';
 
 function ItemHistory({ setIsAuthenticated }) {
@@ -11,6 +12,7 @@ function ItemHistory({ setIsAuthenticated }) {
   const [filter, setFilter] = useState(searchParams.get('filter') || 'all');
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
+  const { getCategoryBySlug } = useCategories();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -162,7 +164,12 @@ function ItemHistory({ setIsAuthenticated }) {
                       <span className="meta-tag">📍 {item.location}</span>
                     )}
                     {item.category && (
-                      <span className="meta-tag">🏷️ {item.category}</span>
+                      <span className="meta-tag">
+                        {(() => {
+                          const cat = getCategoryBySlug(item.category);
+                          return cat ? `${cat.icon} ${cat.display_name}` : `🏷️ ${item.category}`;
+                        })()}
+                      </span>
                     )}
                   </div>
                   <div className="item-footer">
