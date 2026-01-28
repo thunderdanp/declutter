@@ -7,6 +7,8 @@ import './EvaluateItem.css';
 function EvaluateItem({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [profile, setProfile] = useState(null);
+  const [householdMembers, setHouseholdMembers] = useState([]);
+  const [selectedOwners, setSelectedOwners] = useState([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -37,7 +39,34 @@ function EvaluateItem({ setIsAuthenticated }) {
 
   useEffect(() => {
     fetchProfile();
+    fetchHouseholdMembers();
   }, []);
+
+  const fetchHouseholdMembers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/household-members', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setHouseholdMembers(data.members || []);
+      }
+    } catch (error) {
+      console.error('Error fetching household members:', error);
+    }
+  };
+
+  const toggleOwner = (memberId) => {
+    setSelectedOwners(prev =>
+      prev.includes(memberId)
+        ? prev.filter(id => id !== memberId)
+        : [...prev, memberId]
+    );
+  };
 
   const fetchProfile = async () => {
     try {
@@ -213,7 +242,8 @@ function EvaluateItem({ setIsAuthenticated }) {
       data.append('recommendationReasoning', reasoning);
       data.append('answers', JSON.stringify(formData));
       data.append('status', 'evaluated');
-      
+      data.append('ownerIds', JSON.stringify(selectedOwners));
+
       if (image) {
         data.append('image', image);
       }
@@ -262,6 +292,7 @@ function EvaluateItem({ setIsAuthenticated }) {
     setRecommendation(null);
     setAnalyzing(false);
     setAnalysisError(null);
+    setSelectedOwners([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -462,6 +493,26 @@ function EvaluateItem({ setIsAuthenticated }) {
                 </select>
               </div>
             </div>
+
+            {householdMembers.length > 0 && (
+              <div className="form-group">
+                <label>Who owns this item? (Optional)</label>
+                <div className="owner-chips">
+                  {householdMembers.map(member => (
+                    <button
+                      key={member.id}
+                      type="button"
+                      className={`owner-chip ${selectedOwners.includes(member.id) ? 'selected' : ''}`}
+                      onClick={() => toggleOwner(member.id)}
+                    >
+                      {member.name}
+                      {member.relationship && <span className="chip-relationship">({member.relationship})</span>}
+                    </button>
+                  ))}
+                </div>
+                <p className="form-help">Select all household members who own this item</p>
+              </div>
+            )}
           </div>
 
           <div className="card questions-card">
