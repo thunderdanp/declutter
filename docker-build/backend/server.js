@@ -165,6 +165,13 @@ app.post('/api/auth/register', [
 
     const user = result.rows[0];
 
+    // Send welcome email (don't block registration if it fails)
+    emailService.sendTemplatedEmail('welcome', email, {
+      firstName: firstName,
+      lastName: lastName,
+      email: email
+    }).catch(err => console.error('Failed to send welcome email:', err));
+
     // Generate JWT
     const token = jwt.sign(
       { userId: user.id, email: user.email },
