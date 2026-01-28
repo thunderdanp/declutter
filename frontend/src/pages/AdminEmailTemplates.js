@@ -12,8 +12,20 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
     name: '',
     subject: '',
     body: '',
-    description: ''
+    description: '',
+    trigger_event: '',
+    is_enabled: true
   });
+
+  const triggerEvents = [
+    { value: '', label: 'None (Manual only)', description: 'Template must be triggered manually' },
+    { value: 'user_registration', label: 'User Registration', description: 'When a new user registers' },
+    { value: 'user_approved', label: 'User Approved', description: 'When admin approves a user' },
+    { value: 'password_reset', label: 'Password Reset', description: 'When user requests password reset' },
+    { value: 'announcement', label: 'Announcement', description: 'When admin sends an announcement' },
+    { value: 'item_evaluated', label: 'Item Evaluated', description: 'When an item is evaluated' },
+    { value: 'manual', label: 'Manual', description: 'Triggered manually only' }
+  ];
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
@@ -50,7 +62,9 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
       name: '',
       subject: '',
       body: '',
-      description: ''
+      description: '',
+      trigger_event: '',
+      is_enabled: true
     });
   };
 
@@ -62,7 +76,9 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
       name: template.name,
       subject: template.subject,
       body: template.body,
-      description: template.description || ''
+      description: template.description || '',
+      trigger_event: template.trigger_event || '',
+      is_enabled: template.is_enabled !== false
     });
   };
 
@@ -74,7 +90,9 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
       name: '',
       subject: '',
       body: '',
-      description: ''
+      description: '',
+      trigger_event: '',
+      is_enabled: true
     });
   };
 
@@ -139,6 +157,41 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
       console.error('Error deleting template:', error);
       alert('Failed to delete template');
     }
+  };
+
+  const handleToggleEnabled = async (template) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/email-templates/${template.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          subject: template.subject,
+          body: template.body,
+          description: template.description,
+          trigger_event: template.trigger_event,
+          is_enabled: !template.is_enabled
+        })
+      });
+
+      if (response.ok) {
+        fetchTemplates();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to update template');
+      }
+    } catch (error) {
+      console.error('Error toggling template:', error);
+      alert('Failed to update template');
+    }
+  };
+
+  const getTriggerLabel = (triggerEvent) => {
+    const event = triggerEvents.find(e => e.value === triggerEvent);
+    return event ? event.label : triggerEvent || 'None';
   };
 
   const handleLogout = () => {
@@ -238,6 +291,37 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
                     />
                   </div>
 
+                  <div className="form-group">
+                    <label htmlFor="trigger_event">Trigger Event</label>
+                    <select
+                      id="trigger_event"
+                      className="form-control"
+                      value={formData.trigger_event}
+                      onChange={(e) => setFormData({ ...formData, trigger_event: e.target.value })}
+                    >
+                      {triggerEvents.map((event) => (
+                        <option key={event.value} value={event.value}>
+                          {event.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="form-help">
+                      {triggerEvents.find(e => e.value === formData.trigger_event)?.description || 'Select when this template should be automatically triggered'}
+                    </p>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_enabled}
+                        onChange={(e) => setFormData({ ...formData, is_enabled: e.target.checked })}
+                      />
+                      <span style={{ marginLeft: '0.5rem' }}>Template Enabled</span>
+                    </label>
+                    <p className="form-help">When disabled, this template will not send emails even if triggered</p>
+                  </div>
+
                   <div className="settings-actions">
                     {message && (
                       <div className={`message ${message.includes('success') ? 'message-success' : 'message-error'}`}>
@@ -273,7 +357,8 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
                       <tr>
                         <th>Name</th>
                         <th>Subject</th>
-                        <th>Description</th>
+                        <th>Trigger</th>
+                        <th>Status</th>
                         <th>Type</th>
                         <th>Actions</th>
                       </tr>
@@ -283,9 +368,32 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
                         <tr key={template.id}>
                           <td>
                             <strong>{template.name}</strong>
+                            {template.description && (
+                              <div style={{ fontSize: '0.85em', color: '#666', marginTop: '0.25rem' }}>
+                                {template.description}
+                              </div>
+                            )}
                           </td>
                           <td>{template.subject}</td>
-                          <td>{template.description || '-'}</td>
+                          <td>
+                            {template.trigger_event ? (
+                              <span className="status-badge status-info">
+                                {getTriggerLabel(template.trigger_event)}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#999' }}>None</span>
+                            )}
+                          </td>
+                          <td>
+                            <button
+                              className={`status-badge ${template.is_enabled !== false ? 'status-approved' : 'status-pending'}`}
+                              onClick={() => handleToggleEnabled(template)}
+                              style={{ cursor: 'pointer', border: 'none' }}
+                              title={template.is_enabled !== false ? 'Click to disable' : 'Click to enable'}
+                            >
+                              {template.is_enabled !== false ? 'Enabled' : 'Disabled'}
+                            </button>
+                          </td>
                           <td>
                             {template.is_system ? (
                               <span className="status-badge status-admin">System</span>
@@ -315,7 +423,7 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
                       ))}
                       {templates.length === 0 && (
                         <tr>
-                          <td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>
                             No email templates found. Create one to get started.
                           </td>
                         </tr>

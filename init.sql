@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS email_templates (
     body TEXT NOT NULL,
     description VARCHAR(500),
     is_system BOOLEAN DEFAULT FALSE,
+    trigger_event VARCHAR(50),
+    is_enabled BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -87,7 +89,7 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
 );
 
 -- Insert default email templates
-INSERT INTO email_templates (name, subject, body, description, is_system) VALUES
+INSERT INTO email_templates (name, subject, body, description, is_system, trigger_event, is_enabled) VALUES
 ('welcome', 'Welcome to Declutter Assistant!', 'Hello {{firstName}},
 
 Welcome to Declutter Assistant! We''re excited to help you organize and simplify your life.
@@ -100,7 +102,7 @@ Get started by:
 If you have any questions, feel free to reach out.
 
 Best regards,
-The Declutter Team', 'Sent to new users upon registration', true),
+The Declutter Team', 'Sent to new users upon registration', true, 'user_registration', true),
 ('password_reset', 'Reset Your Password', 'Hello {{firstName}},
 
 You requested to reset your password. Click the link below to set a new password:
@@ -112,13 +114,13 @@ This link will expire in 1 hour.
 If you didn''t request this, please ignore this email.
 
 Best regards,
-The Declutter Team', 'Sent when user requests password reset', true),
+The Declutter Team', 'Sent when user requests password reset', true, 'password_reset', true),
 ('announcement', 'Announcement: {{title}}', 'Hello {{firstName}},
 
 {{content}}
 
 Best regards,
-The Declutter Team', 'Template for admin announcements', true)
+The Declutter Team', 'Template for admin announcements', true, 'announcement', true)
 ON CONFLICT (name) DO NOTHING;
 
 -- Create indexes for better query performance

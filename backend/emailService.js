@@ -92,6 +92,20 @@ class EmailService {
     }
   }
 
+  // Get enabled email template by trigger event
+  async getTemplateByTrigger(triggerEvent) {
+    try {
+      const result = await this.pool.query(
+        'SELECT * FROM email_templates WHERE trigger_event = $1 AND is_enabled = true',
+        [triggerEvent]
+      );
+      return result.rows[0] || null;
+    } catch (error) {
+      console.error('Error getting template by trigger:', error);
+      return null;
+    }
+  }
+
   // Replace template variables with actual values
   renderTemplate(template, variables) {
     let subject = template.subject;
@@ -120,6 +134,12 @@ class EmailService {
         return { success: false, error: `Template '${templateName}' not found` };
       }
 
+      // Check if template is enabled
+      if (template.is_enabled === false) {
+        console.log(`Template '${templateName}' is disabled, skipping email`);
+        return { success: false, error: 'Template is disabled', disabled: true };
+      }
+
       const { subject, body } = this.renderTemplate(template, variables);
 
       const mailOptions = {
@@ -134,6 +154,39 @@ class EmailService {
       return { success: true, messageId: info.messageId };
     } catch (error) {
       console.error('Error sending email:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Send email using a trigger event
+  async sendTriggeredEmail(triggerEvent, to, variables) {
+    try {
+      const template = await this.getTemplateByTrigger(triggerEvent);
+      if (!template) {
+        console.log(`No enabled template found for trigger '${triggerEvent}'`);
+        return { success: false, error: `No enabled template for trigger '${triggerEvent}'`, noTemplate: true };
+      }
+
+      const transporter = await this.initTransporter();
+      if (!transporter) {
+        console.error('SMTP not configured');
+        return { success: false, error: 'SMTP not configured' };
+      }
+
+      const { subject, body } = this.renderTemplate(template, variables);
+
+      const mailOptions = {
+        from: this.fromAddress,
+        to: to,
+        subject: subject,
+        text: body,
+        html: body.replace(/\n/g, '<br>')
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      return { success: true, messageId: info.messageId, templateName: template.name };
+    } catch (error) {
+      console.error('Error sending triggered email:', error);
       return { success: false, error: error.message };
     }
   }

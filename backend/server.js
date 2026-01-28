@@ -834,10 +834,10 @@ app.post('/api/admin/email-templates', authenticateToken, requireAdmin, [
   }
 
   try {
-    const { name, subject, body, description } = req.body;
+    const { name, subject, body, description, trigger_event, is_enabled } = req.body;
     const result = await pool.query(
-      'INSERT INTO email_templates (name, subject, body, description) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, subject, body, description || null]
+      'INSERT INTO email_templates (name, subject, body, description, trigger_event, is_enabled) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, subject, body, description || null, trigger_event || null, is_enabled !== false]
     );
     res.status(201).json({ template: result.rows[0] });
   } catch (error) {
@@ -852,10 +852,10 @@ app.post('/api/admin/email-templates', authenticateToken, requireAdmin, [
 // Update email template
 app.put('/api/admin/email-templates/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { subject, body, description } = req.body;
+    const { subject, body, description, trigger_event, is_enabled } = req.body;
     const result = await pool.query(
-      'UPDATE email_templates SET subject = $1, body = $2, description = $3 WHERE id = $4 RETURNING *',
-      [subject, body, description || null, req.params.id]
+      'UPDATE email_templates SET subject = $1, body = $2, description = $3, trigger_event = $4, is_enabled = $5 WHERE id = $6 RETURNING *',
+      [subject, body, description || null, trigger_event || null, is_enabled !== false, req.params.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Template not found' });
