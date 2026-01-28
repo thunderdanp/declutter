@@ -45,11 +45,11 @@ function ItemDetail({ setIsAuthenticated }) {
         const data = await response.json();
         setItem(data.item);
       } else {
-        navigate('/history');
+        navigate('/my-items');
       }
     } catch (error) {
       console.error('Error fetching item:', error);
-      navigate('/history');
+      navigate('/my-items');
     } finally {
       setLoading(false);
     }
@@ -90,7 +90,7 @@ function ItemDetail({ setIsAuthenticated }) {
       });
 
       if (response.ok) {
-        navigate('/history');
+        navigate('/my-items');
       } else {
         alert('Error deleting item');
       }
@@ -215,7 +215,7 @@ function ItemDetail({ setIsAuthenticated }) {
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
-          <Link to="/history" className="nav-link">My Items</Link>
+          <Link to="/my-items" className="nav-link">My Items</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
@@ -227,7 +227,7 @@ function ItemDetail({ setIsAuthenticated }) {
 
       <div className="container">
         <div className="back-link">
-          <Link to="/history">← Back to My Items</Link>
+          <Link to="/my-items">← Back to My Items</Link>
         </div>
 
         <div className="detail-header">

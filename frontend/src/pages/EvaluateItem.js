@@ -277,7 +277,7 @@ function EvaluateItem({ setIsAuthenticated }) {
             <Link to="/dashboard" className="nav-link">Dashboard</Link>
             <Link to="/profile" className="nav-link">Profile</Link>
             <Link to="/evaluate" className="nav-link active">Evaluate Item</Link>
-            <Link to="/history" className="nav-link">My Items</Link>
+            <Link to="/my-items" className="nav-link">My Items</Link>
             <Link to="/settings" className="nav-link">Settings</Link>
             {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
             <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
@@ -308,7 +308,7 @@ function EvaluateItem({ setIsAuthenticated }) {
               <Link to={`/items/${recommendation.itemId}`} className="btn btn-secondary">
                 View Item Details
               </Link>
-              <Link to="/history" className="btn btn-secondary">
+              <Link to="/my-items" className="btn btn-secondary">
                 View All Items
               </Link>
             </div>
@@ -328,7 +328,7 @@ function EvaluateItem({ setIsAuthenticated }) {
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link active">Evaluate Item</Link>
-          <Link to="/history" className="nav-link">My Items</Link>
+          <Link to="/my-items" className="nav-link">My Items</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
