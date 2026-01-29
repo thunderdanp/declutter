@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { analyzeItem, generateReasoning, recommendationLabels } from '../utils/recommendationEngine';
 import { useTheme } from '../context/ThemeContext';
+import { useCategories } from '../context/CategoryContext';
+import CategorySelect from '../components/CategorySelect';
 import './ItemDetail.css';
 
 function ItemDetail({ setIsAuthenticated }) {
@@ -16,6 +18,7 @@ function ItemDetail({ setIsAuthenticated }) {
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
   const { isDark, toggleTheme } = useTheme();
+  const { getCategoryBySlug } = useCategories();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -286,18 +289,11 @@ function ItemDetail({ setIsAuthenticated }) {
 
                 <div className="form-group">
                   <label>Category</label>
-                  <select name="category" value={editData.category} onChange={handleInputChange}>
-                    <option value="">Select category...</option>
-                    <option value="clothing">Clothing</option>
-                    <option value="books">Books</option>
-                    <option value="electronics">Electronics</option>
-                    <option value="kitchen">Kitchen Items</option>
-                    <option value="decor">Decor</option>
-                    <option value="furniture">Furniture</option>
-                    <option value="toys">Toys</option>
-                    <option value="tools">Tools</option>
-                    <option value="other">Other</option>
-                  </select>
+                  <CategorySelect
+                    name="category"
+                    value={editData.category}
+                    onChange={handleInputChange}
+                  />
                 </div>
               </div>
             </div>
@@ -471,7 +467,12 @@ function ItemDetail({ setIsAuthenticated }) {
                   {item.category && (
                     <div className="detail-row">
                       <span className="detail-label">Category:</span>
-                      <span className="detail-value">{item.category}</span>
+                      <span className="detail-value">
+                        {(() => {
+                          const cat = getCategoryBySlug(item.category);
+                          return cat ? `${cat.icon} ${cat.display_name}` : item.category;
+                        })()}
+                      </span>
                     </div>
                   )}
                   <div className="detail-row">

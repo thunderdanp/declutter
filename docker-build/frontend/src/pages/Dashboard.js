@@ -132,6 +132,12 @@ function Dashboard({ setIsAuthenticated }) {
                   <h3>My Items</h3>
                   <p>Review all your evaluated items</p>
                 </Link>
+
+                <Link to="/settings" className="action-card">
+                  <div className="action-icon">⚙️</div>
+                  <h3>Settings</h3>
+                  <p>Manage your account and notification preferences</p>
+                </Link>
               </div>
             </div>
           </>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
+import { useCategories } from '../context/CategoryContext';
 import './ItemHistory.css';
 
 function ItemHistory({ setIsAuthenticated }) {
@@ -10,10 +11,9 @@ function ItemHistory({ setIsAuthenticated }) {
   const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const [filter, setFilter] = useState(searchParams.get('filter') || 'all');
-  const [ownerFilter, setOwnerFilter] = useState('all');
-  const [householdMembers, setHouseholdMembers] = useState([]);
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
+  const { getCategoryBySlug } = useCategories();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -23,13 +23,16 @@ function ItemHistory({ setIsAuthenticated }) {
   };
 
   useEffect(() => {
-    fetchHouseholdMembers();
     fetchAllItems();
   }, []);
 
   useEffect(() => {
-    fetchItems();
-  }, [filter, ownerFilter]);
+    if (filter === 'all') {
+      setItems(allItems);
+    } else {
+      setItems(allItems.filter(item => item.recommendation === filter));
+    }
+  }, [filter, allItems]);
 
   const fetchAllItems = async () => {
     try {
@@ -43,75 +46,6 @@ function ItemHistory({ setIsAuthenticated }) {
       if (response.ok) {
         const data = await response.json();
         setAllItems(data.items);
-      }
-    } catch (error) {
-      console.error('Error fetching all items:', error);
-    }
-  };
-
-  const getCounts = () => {
-    const counts = {
-      all: allItems.length,
-      keep: 0,
-      storage: 0,
-      sell: 0,
-      donate: 0,
-      discard: 0
-    };
-    allItems.forEach(item => {
-      if (counts[item.recommendation] !== undefined) {
-        counts[item.recommendation]++;
-      }
-    });
-    return counts;
-  };
-
-  const counts = getCounts();
-
-  const fetchHouseholdMembers = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/household-members', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setHouseholdMembers(data.members);
-      }
-    } catch (error) {
-      console.error('Error fetching household members:', error);
-    }
-  };
-
-  const fetchItems = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const params = new URLSearchParams();
-
-      if (filter !== 'all') {
-        params.append('recommendation', filter);
-      }
-
-      if (ownerFilter !== 'all') {
-        params.append('ownerId', ownerFilter);
-      }
-
-      let url = '/api/items';
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
         setItems(data.items);
       }
     } catch (error) {
@@ -121,20 +55,17 @@ function ItemHistory({ setIsAuthenticated }) {
     }
   };
 
-  const getOwnerNames = (ownerIds) => {
-    if (!ownerIds || ownerIds.length === 0) return null;
-    const names = ownerIds
-      .map(id => householdMembers.find(m => m.id === id)?.name)
-      .filter(Boolean);
-    return names.length > 0 ? names.join(', ') : null;
+  const getCount = (recommendation) => {
+    if (recommendation === 'all') return allItems.length;
+    return allItems.filter(item => item.recommendation === recommendation).length;
   };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
     });
   };
 
@@ -179,62 +110,39 @@ function ItemHistory({ setIsAuthenticated }) {
             className={`filter-btn filter-all ${filter === 'all' ? 'active' : ''}`}
             onClick={() => setFilter('all')}
           >
-            <span className="filter-count">{counts.all}</span>
-            <span className="filter-label">All Items</span>
+            All Items ({getCount('all')})
           </button>
           <button
             className={`filter-btn filter-keep ${filter === 'keep' ? 'active' : ''}`}
             onClick={() => setFilter('keep')}
           >
-            <span className="filter-count">{counts.keep}</span>
-            <span className="filter-label">Keep</span>
+            Keep ({getCount('keep')})
           </button>
           <button
             className={`filter-btn filter-storage ${filter === 'storage' ? 'active' : ''}`}
             onClick={() => setFilter('storage')}
           >
-            <span className="filter-count">{counts.storage}</span>
-            <span className="filter-label">Storage</span>
+            Storage ({getCount('storage')})
           </button>
           <button
             className={`filter-btn filter-sell ${filter === 'sell' ? 'active' : ''}`}
             onClick={() => setFilter('sell')}
           >
-            <span className="filter-count">{counts.sell}</span>
-            <span className="filter-label">Sell</span>
+            Sell ({getCount('sell')})
           </button>
           <button
             className={`filter-btn filter-donate ${filter === 'donate' ? 'active' : ''}`}
             onClick={() => setFilter('donate')}
           >
-            <span className="filter-count">{counts.donate}</span>
-            <span className="filter-label">Donate</span>
+            Donate ({getCount('donate')})
           </button>
           <button
             className={`filter-btn filter-discard ${filter === 'discard' ? 'active' : ''}`}
             onClick={() => setFilter('discard')}
           >
-            <span className="filter-count">{counts.discard}</span>
-            <span className="filter-label">Discard</span>
+            Discard ({getCount('discard')})
           </button>
         </div>
-
-        {householdMembers.length > 0 && (
-          <div className="owner-filter">
-            <label className="owner-filter-label">Owner:</label>
-            <select
-              value={ownerFilter}
-              onChange={(e) => setOwnerFilter(e.target.value)}
-              className="owner-filter-select"
-            >
-              <option value="all">All People</option>
-              <option value="shared">Shared Items</option>
-              {householdMembers.map(member => (
-                <option key={member.id} value={member.id}>{member.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
 
         {loading ? (
           <div className="loading">Loading items...</div>
@@ -244,7 +152,7 @@ function ItemHistory({ setIsAuthenticated }) {
             <h2>No Items Yet</h2>
             <p>Start evaluating items to see them here</p>
             <Link to="/evaluate" className="btn btn-primary">
-              Evaluate Your First Item
+              Evaluate an Item
             </Link>
           </div>
         ) : (
@@ -266,10 +174,12 @@ function ItemHistory({ setIsAuthenticated }) {
                       <span className="meta-tag">📍 {item.location}</span>
                     )}
                     {item.category && (
-                      <span className="meta-tag">🏷️ {item.category}</span>
-                    )}
-                    {getOwnerNames(item.owner_ids) && (
-                      <span className="meta-tag owner-tag">👤 {getOwnerNames(item.owner_ids)}</span>
+                      <span className="meta-tag">
+                        {(() => {
+                          const cat = getCategoryBySlug(item.category);
+                          return cat ? `${cat.icon} ${cat.display_name}` : `🏷️ ${item.category}`;
+                        })()}
+                      </span>
                     )}
                   </div>
                   <div className="item-footer">
