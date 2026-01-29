@@ -436,7 +436,8 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
 {
   "name": "A brief, clear name for the item (e.g., 'Vintage Record Player', 'Winter Coat', 'Kitchen Blender')",
   "description": "A detailed description of the item including its appearance, condition, and any notable features (2-3 sentences)",
-  "category": "One of these categories: ${categoryList}"
+  "category": "One of these categories: ${categoryList}",
+  "location": "Suggest the most likely room where this item is typically found or used. One of: bedroom, living-room, kitchen, bathroom, garage, attic, basement, closet, other"
 }
 
 Be specific and descriptive. If multiple items are visible, focus on the main/central item.`

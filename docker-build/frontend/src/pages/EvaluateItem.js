@@ -194,7 +194,8 @@ function EvaluateItem({ setIsAuthenticated }) {
           ...prev,
           name: data.name || prev.name,
           description: data.description || prev.description,
-          category: data.category || prev.category
+          category: data.category || prev.category,
+          location: data.location || prev.location
         }));
       } else {
         const errorData = await response.json();
