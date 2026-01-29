@@ -420,3 +420,115 @@
     width: 100%;
   }
 }
+
+/* Theme Toggle Button */
+.btn-theme-toggle {
+  background: none;
+  border: 2px solid var(--soft-gray);
+  color: var(--charcoal);
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-theme-toggle:hover {
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+
+/* Dark Mode Overrides for Admin */
+[data-theme="dark"] .admin-stat-card,
+[data-theme="dark"] .admin-section,
+[data-theme="dark"] .admin-action-card,
+[data-theme="dark"] .admin-table-container,
+[data-theme="dark"] .settings-container {
+  background: var(--card-bg);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .admin-action-card {
+  color: #f0f0f0;
+}
+
+[data-theme="dark"] .admin-action-card p {
+  color: #b0b0b0;
+}
+
+[data-theme="dark"] .users-table th,
+[data-theme="dark"] .admin-table thead,
+[data-theme="dark"] .admin-table th {
+  background: #2d3748;
+  color: #f0f0f0;
+}
+
+[data-theme="dark"] .users-table td,
+[data-theme="dark"] .admin-table td {
+  border-bottom-color: #3d4a5c;
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .users-table tr:hover,
+[data-theme="dark"] .admin-table tbody tr:hover {
+  background: #2d3748;
+}
+
+[data-theme="dark"] .settings-section {
+  border-bottom-color: #3d4a5c;
+}
+
+[data-theme="dark"] .settings-section-title {
+  color: #f0f0f0;
+}
+
+[data-theme="dark"] .form-group label {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .form-control {
+  background: #2d3748;
+  border-color: #3d4a5c;
+  color: #f0f0f0;
+}
+
+[data-theme="dark"] .form-control:focus {
+  border-color: var(--terracotta);
+}
+
+[data-theme="dark"] .form-help {
+  color: #a0a0a0;
+}
+
+[data-theme="dark"] .info-box {
+  background: #2d3748;
+}
+
+[data-theme="dark"] .info-box code {
+  background: #1e2a3a;
+  color: var(--terracotta);
+}
+
+[data-theme="dark"] .change-recommendation-form,
+[data-theme="dark"] .original-recommendation {
+  background: #2d3748;
+}
+
+[data-theme="dark"] .change-recommendation-form label {
+  color: #e0e0e0;
+}
+
+[data-theme="dark"] .stat-number {
+  color: #f0f0f0;
+}
+
+[data-theme="dark"] .stat-label {
+  color: #b0b0b0;
+}
+
+[data-theme="dark"] .section-title {
+  color: #f0f0f0;
+}

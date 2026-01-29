@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useTheme } from '../context/ThemeContext';
 import './Admin.css';
 
 function AdminUsers({ setIsAuthenticated }) {
@@ -11,6 +12,7 @@ function AdminUsers({ setIsAuthenticated }) {
   const [savingApiKey, setSavingApiKey] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -196,6 +198,9 @@ function AdminUsers({ setIsAuthenticated }) {
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>
           <Link to="/dashboard" className="nav-link">User View</Link>
+          <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? '☀️' : '🌙'}
+          </button>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>

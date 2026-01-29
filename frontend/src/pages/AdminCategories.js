@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCategories } from '../context/CategoryContext';
+import { useTheme } from '../context/ThemeContext';
 import './Admin.css';
 import './AdminCategories.css';
 
@@ -41,6 +42,7 @@ function AdminCategories({ setIsAuthenticated }) {
   const [message, setMessage] = useState('');
   const navigate = useNavigate();
   const { refreshCategories } = useCategories();
+  const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     fetchCategories();
@@ -284,6 +286,9 @@ function AdminCategories({ setIsAuthenticated }) {
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>
           <Link to="/dashboard" className="nav-link">User View</Link>
+          <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
+            {isDark ? '☀️' : '🌙'}
+          </button>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </nav>
