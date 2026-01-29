@@ -201,6 +201,21 @@ INSERT INTO categories (name, slug, display_name, icon, color, sort_order, is_de
 ('Other', 'other', 'Other', '📦', '#78909C', 99, true)
 ON CONFLICT (slug) DO NOTHING;
 
+-- API usage logs table
+CREATE TABLE IF NOT EXISTS api_usage_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    endpoint VARCHAR(100),
+    model VARCHAR(50),
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    estimated_cost DECIMAL(10, 6) DEFAULT 0,
+    success BOOLEAN DEFAULT TRUE,
+    error_message TEXT,
+    used_user_key BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
 CREATE INDEX IF NOT EXISTS idx_categories_sort_order ON categories(sort_order);
@@ -213,6 +228,8 @@ CREATE INDEX IF NOT EXISTS idx_item_members_member_id ON item_members(member_id)
 CREATE INDEX idx_personality_profiles_user_id ON personality_profiles(user_id);
 CREATE INDEX idx_announcements_created_at ON announcements(created_at);
 CREATE INDEX idx_notification_preferences_user_id ON notification_preferences(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_usage_logs_user_id ON api_usage_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_usage_logs_created_at ON api_usage_logs(created_at);
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
