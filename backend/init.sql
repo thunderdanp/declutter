@@ -121,6 +121,25 @@ Best regards,
 The Declutter Team', 'Template for admin announcements', true)
 ON CONFLICT (name) DO NOTHING;
 
+-- Household members table
+CREATE TABLE IF NOT EXISTS household_members (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    relationship VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Item household members junction table
+CREATE TABLE IF NOT EXISTS item_members (
+    id SERIAL PRIMARY KEY,
+    item_id INTEGER REFERENCES items(id) ON DELETE CASCADE,
+    member_id INTEGER REFERENCES household_members(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(item_id, member_id)
+);
+
 -- Categories table
 CREATE TABLE IF NOT EXISTS categories (
     id SERIAL PRIMARY KEY,
@@ -154,6 +173,9 @@ CREATE INDEX IF NOT EXISTS idx_categories_sort_order ON categories(sort_order);
 CREATE INDEX idx_items_user_id ON items(user_id);
 CREATE INDEX idx_items_status ON items(status);
 CREATE INDEX idx_items_recommendation ON items(recommendation);
+CREATE INDEX IF NOT EXISTS idx_household_members_user_id ON household_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_item_members_item_id ON item_members(item_id);
+CREATE INDEX IF NOT EXISTS idx_item_members_member_id ON item_members(member_id);
 CREATE INDEX idx_personality_profiles_user_id ON personality_profiles(user_id);
 CREATE INDEX idx_announcements_created_at ON announcements(created_at);
 CREATE INDEX idx_notification_preferences_user_id ON notification_preferences(user_id);
@@ -187,6 +209,10 @@ CREATE TRIGGER update_announcements_updated_at BEFORE UPDATE ON announcements
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_notification_preferences_updated_at BEFORE UPDATE ON notification_preferences
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_household_members_updated_at ON household_members;
+CREATE TRIGGER update_household_members_updated_at BEFORE UPDATE ON household_members
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 DROP TRIGGER IF EXISTS update_categories_updated_at ON categories;

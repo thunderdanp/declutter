@@ -1761,6 +1761,88 @@ app.put('/api/user/api-settings', authenticateToken, async (req, res) => {
   }
 });
 
+// Get household members
+app.get('/api/household-members', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, relationship, created_at FROM household_members WHERE user_id = $1 ORDER BY name',
+      [req.user.userId]
+    );
+    res.json({ members: result.rows });
+  } catch (error) {
+    console.error('Get household members error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Add household member
+app.post('/api/household-members', authenticateToken, async (req, res) => {
+  try {
+    const { name, relationship } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO household_members (user_id, name, relationship) VALUES ($1, $2, $3) RETURNING id, name, relationship, created_at',
+      [req.user.userId, name.trim(), relationship || null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Add household member error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update household member
+app.put('/api/household-members/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, relationship } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const result = await pool.query(
+      'UPDATE household_members SET name = $1, relationship = $2 WHERE id = $3 AND user_id = $4 RETURNING id, name, relationship, created_at',
+      [name.trim(), relationship || null, id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Household member not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Update household member error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete household member
+app.delete('/api/household-members/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      'DELETE FROM household_members WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Household member not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete household member error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
