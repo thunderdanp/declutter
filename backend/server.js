@@ -270,13 +270,120 @@ app.post('/api/profile', authenticateToken, async (req, res) => {
 
 // ============= IMAGE ANALYSIS ROUTE =============
 
+// Helper function to calculate estimated cost (Claude Sonnet pricing)
+const calculateApiCost = (inputTokens, outputTokens) => {
+  // Claude Sonnet 4 pricing: $3/M input, $15/M output
+  const inputCost = (inputTokens / 1000000) * 3;
+  const outputCost = (outputTokens / 1000000) * 15;
+  return inputCost + outputCost;
+};
+
+// Helper function to log API usage
+const logApiUsage = async (userId, endpoint, model, inputTokens, outputTokens, success, errorMessage = null, usedUserKey = false) => {
+  try {
+    const estimatedCost = calculateApiCost(inputTokens, outputTokens);
+    await pool.query(
+      `INSERT INTO api_usage_logs (user_id, endpoint, model, input_tokens, output_tokens, estimated_cost, success, error_message, used_user_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [userId, endpoint, model, inputTokens, outputTokens, estimatedCost, success, errorMessage, usedUserKey]
+    );
+  } catch (err) {
+    console.error('Error logging API usage:', err);
+  }
+};
+
+// Helper function to check usage limits
+const checkUsageLimits = async (userId) => {
+  try {
+    // Get limit settings
+    const settingsResult = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('api_monthly_cost_limit', 'api_per_user_monthly_limit')"
+    );
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = parseFloat(row.setting_value);
+    });
+
+    const monthlyLimit = settings.api_monthly_cost_limit || 50;
+    const perUserLimit = settings.api_per_user_monthly_limit || 10;
+
+    // Get current month's usage
+    const totalUsageResult = await pool.query(
+      `SELECT COALESCE(SUM(estimated_cost), 0) as total_cost
+       FROM api_usage_logs
+       WHERE created_at >= date_trunc('month', CURRENT_DATE)
+       AND used_user_key = false`
+    );
+    const totalCost = parseFloat(totalUsageResult.rows[0].total_cost);
+
+    // Get user's current month usage
+    const userUsageResult = await pool.query(
+      `SELECT COALESCE(SUM(estimated_cost), 0) as user_cost
+       FROM api_usage_logs
+       WHERE user_id = $1
+       AND created_at >= date_trunc('month', CURRENT_DATE)
+       AND used_user_key = false`,
+      [userId]
+    );
+    const userCost = parseFloat(userUsageResult.rows[0].user_cost);
+
+    return {
+      allowed: totalCost < monthlyLimit && userCost < perUserLimit,
+      totalCost,
+      userCost,
+      monthlyLimit,
+      perUserLimit,
+      reason: totalCost >= monthlyLimit
+        ? 'Monthly system limit reached'
+        : userCost >= perUserLimit
+          ? 'Your monthly usage limit reached'
+          : null
+    };
+  } catch (err) {
+    console.error('Error checking usage limits:', err);
+    return { allowed: true }; // Allow on error to not block users
+  }
+};
+
 // Analyze image with Claude
 app.post('/api/analyze-image', authenticateToken, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No image file provided' });
   }
 
+  const modelName = 'claude-sonnet-4-20250514';
+  let usedUserKey = false;
+
   try {
+    // Check if user has their own API key
+    const userResult = await pool.query(
+      'SELECT anthropic_api_key FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+    const userApiKey = userResult.rows[0]?.anthropic_api_key;
+    usedUserKey = !!userApiKey;
+
+    // If not using user's key, check system usage limits
+    if (!usedUserKey) {
+      const limitCheck = await checkUsageLimits(req.user.userId);
+      if (!limitCheck.allowed) {
+        return res.status(429).json({
+          error: 'Usage limit exceeded',
+          message: limitCheck.reason + '. Add your own API key in settings to continue.',
+          userCost: limitCheck.userCost,
+          perUserLimit: limitCheck.perUserLimit
+        });
+      }
+    }
+
+    const apiKey = userApiKey || process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return res.status(400).json({
+        error: 'No API key available',
+        message: 'Please add your Anthropic API key in settings or contact the administrator'
+      });
+    }
+
     // Fetch categories from database for the prompt
     const categoriesResult = await pool.query(
       'SELECT slug FROM categories ORDER BY sort_order ASC, name ASC'
@@ -292,12 +399,12 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
 
     // Initialize Anthropic client
     const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY
+      apiKey: apiKey
     });
 
     // Send to Claude for analysis
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: modelName,
       max_tokens: 1024,
       messages: [
         {
@@ -327,6 +434,11 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
         },
       ],
     });
+
+    // Log successful API usage
+    const inputTokens = message.usage?.input_tokens || 0;
+    const outputTokens = message.usage?.output_tokens || 0;
+    await logApiUsage(req.user.userId, '/api/analyze-image', modelName, inputTokens, outputTokens, true, null, usedUserKey);
 
     // Parse Claude's response
     const responseText = message.content[0].text;
@@ -367,9 +479,15 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
   } catch (error) {
     console.error('Image analysis error:', error);
 
+    // Log failed API usage
+    await logApiUsage(req.user.userId, '/api/analyze-image', modelName, 0, 0, false, error.message, usedUserKey);
+
     if (error.status === 401) {
-      return res.status(500).json({
-        error: 'API key not configured. Please set ANTHROPIC_API_KEY environment variable.'
+      return res.status(401).json({
+        error: 'Invalid API key',
+        message: usedUserKey
+          ? 'Your API key is invalid. Please check your API key in settings.'
+          : 'System API key is not configured. Please add your own API key in settings.'
       });
     }
 
@@ -1010,6 +1128,173 @@ app.post('/api/admin/announcements/:id/send', authenticateToken, requireAdmin, a
     }
   } catch (error) {
     console.error('Send announcement error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= ADMIN API USAGE ROUTES =============
+
+// Get API usage statistics
+app.get('/api/admin/api-usage/stats', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Get current month's total usage
+    const totalUsageResult = await pool.query(`
+      SELECT
+        COUNT(*) as total_calls,
+        SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful_calls,
+        SUM(CASE WHEN NOT success THEN 1 ELSE 0 END) as failed_calls,
+        COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+        COALESCE(SUM(estimated_cost), 0) as total_cost,
+        COALESCE(SUM(CASE WHEN used_user_key THEN estimated_cost ELSE 0 END), 0) as user_key_cost,
+        COALESCE(SUM(CASE WHEN NOT used_user_key THEN estimated_cost ELSE 0 END), 0) as system_key_cost
+      FROM api_usage_logs
+      WHERE created_at >= date_trunc('month', CURRENT_DATE)
+    `);
+
+    // Get daily usage for the current month
+    const dailyUsageResult = await pool.query(`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as calls,
+        SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful,
+        SUM(CASE WHEN NOT success THEN 1 ELSE 0 END) as failed,
+        COALESCE(SUM(estimated_cost), 0) as cost
+      FROM api_usage_logs
+      WHERE created_at >= date_trunc('month', CURRENT_DATE)
+      GROUP BY DATE(created_at)
+      ORDER BY DATE(created_at)
+    `);
+
+    // Get top users by usage
+    const topUsersResult = await pool.query(`
+      SELECT
+        u.id,
+        u.email,
+        u.first_name,
+        u.last_name,
+        COUNT(*) as total_calls,
+        COALESCE(SUM(a.estimated_cost), 0) as total_cost,
+        SUM(CASE WHEN a.used_user_key THEN 1 ELSE 0 END) as user_key_calls
+      FROM api_usage_logs a
+      JOIN users u ON a.user_id = u.id
+      WHERE a.created_at >= date_trunc('month', CURRENT_DATE)
+      GROUP BY u.id, u.email, u.first_name, u.last_name
+      ORDER BY total_cost DESC
+      LIMIT 10
+    `);
+
+    // Get settings
+    const settingsResult = await pool.query(`
+      SELECT setting_key, setting_value
+      FROM system_settings
+      WHERE setting_key LIKE 'api_%'
+    `);
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+
+    const stats = totalUsageResult.rows[0];
+    res.json({
+      currentMonth: {
+        totalCalls: parseInt(stats.total_calls),
+        successfulCalls: parseInt(stats.successful_calls),
+        failedCalls: parseInt(stats.failed_calls),
+        successRate: stats.total_calls > 0
+          ? ((stats.successful_calls / stats.total_calls) * 100).toFixed(1)
+          : 0,
+        totalInputTokens: parseInt(stats.total_input_tokens),
+        totalOutputTokens: parseInt(stats.total_output_tokens),
+        totalCost: parseFloat(stats.total_cost).toFixed(4),
+        userKeyCost: parseFloat(stats.user_key_cost).toFixed(4),
+        systemKeyCost: parseFloat(stats.system_key_cost).toFixed(4)
+      },
+      dailyUsage: dailyUsageResult.rows.map(row => ({
+        date: row.date,
+        calls: parseInt(row.calls),
+        successful: parseInt(row.successful),
+        failed: parseInt(row.failed),
+        cost: parseFloat(row.cost).toFixed(4)
+      })),
+      topUsers: topUsersResult.rows.map(row => ({
+        id: row.id,
+        email: row.email,
+        name: `${row.first_name} ${row.last_name}`,
+        totalCalls: parseInt(row.total_calls),
+        totalCost: parseFloat(row.total_cost).toFixed(4),
+        userKeyCalls: parseInt(row.user_key_calls)
+      })),
+      settings: {
+        monthlyLimit: parseFloat(settings.api_monthly_cost_limit || 50),
+        perUserLimit: parseFloat(settings.api_per_user_monthly_limit || 10),
+        alertThreshold: parseInt(settings.api_alert_threshold_percent || 80),
+        alertsEnabled: settings.api_usage_alerts_enabled === 'true'
+      }
+    });
+  } catch (error) {
+    console.error('Get API usage stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get API usage logs (paginated)
+app.get('/api/admin/api-usage/logs', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    const logsResult = await pool.query(`
+      SELECT a.*, u.email, u.first_name, u.last_name
+      FROM api_usage_logs a
+      LEFT JOIN users u ON a.user_id = u.id
+      ORDER BY a.created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    const countResult = await pool.query('SELECT COUNT(*) FROM api_usage_logs');
+    const totalCount = parseInt(countResult.rows[0].count);
+
+    res.json({
+      logs: logsResult.rows,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get API usage logs error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update API usage settings
+app.put('/api/admin/api-usage/settings', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { monthlyLimit, perUserLimit, alertThreshold, alertsEnabled } = req.body;
+
+    const updates = [
+      ['api_monthly_cost_limit', monthlyLimit?.toString()],
+      ['api_per_user_monthly_limit', perUserLimit?.toString()],
+      ['api_alert_threshold_percent', alertThreshold?.toString()],
+      ['api_usage_alerts_enabled', alertsEnabled?.toString()]
+    ].filter(([key, value]) => value !== undefined);
+
+    for (const [key, value] of updates) {
+      await pool.query(
+        `INSERT INTO system_settings (setting_key, setting_value)
+         VALUES ($1, $2)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP`,
+        [key, value]
+      );
+    }
+
+    res.json({ message: 'Settings updated successfully' });
+  } catch (error) {
+    console.error('Update API usage settings error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -5,26 +5,10 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
-const crypto = require('crypto');
 const { Pool } = require('pg');
 const { body, validationResult } = require('express-validator');
 const Anthropic = require('@anthropic-ai/sdk');
-const nodemailer = require('nodemailer');
 const EmailService = require('./emailService');
-
-// Email transporter configuration
-const emailTransporter = nodemailer.createTransport({
-  host: process.env.SMTP_SERVER,
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_LOGIN,
-    pass: process.env.SMTP_PASSWORD
-  },
-  tls: {
-    rejectUnauthorized: process.env.SMTP_OPENSSL_VERIFY_MODE === 'peer'
-  }
-});
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -124,28 +108,7 @@ app.post('/api/auth/register', [
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { email, password, firstName, lastName, recaptchaToken } = req.body;
-
-  // Verify reCAPTCHA token
-  if (!recaptchaToken) {
-    return res.status(400).json({ error: 'reCAPTCHA verification required' });
-  }
-
-  try {
-    const recaptchaResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`
-    });
-    const recaptchaData = await recaptchaResponse.json();
-
-    if (!recaptchaData.success) {
-      return res.status(400).json({ error: 'reCAPTCHA verification failed' });
-    }
-  } catch (recaptchaError) {
-    console.error('reCAPTCHA verification error:', recaptchaError);
-    return res.status(500).json({ error: 'reCAPTCHA verification error' });
-  }
+  const { email, password, firstName, lastName } = req.body;
 
   try {
     // Check if user exists
@@ -164,13 +127,6 @@ app.post('/api/auth/register', [
     );
 
     const user = result.rows[0];
-
-    // Send welcome email (don't block registration if it fails)
-    emailService.sendTemplatedEmail('welcome', email, {
-      firstName: firstName,
-      lastName: lastName,
-      email: email
-    }).catch(err => console.error('Failed to send welcome email:', err));
 
     // Generate JWT
     const token = jwt.sign(
@@ -245,140 +201,6 @@ app.post('/api/auth/login', [
   }
 });
 
-// Forgot Password - Request reset link
-app.post('/api/auth/forgot-password', [
-  body('email').isEmail().normalizeEmail()
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { email } = req.body;
-
-  try {
-    // Check if user exists
-    const userResult = await pool.query('SELECT id, first_name FROM users WHERE email = $1', [email]);
-
-    // Always return success to prevent email enumeration
-    if (userResult.rows.length === 0) {
-      return res.json({ message: 'If an account exists, a reset link has been sent.' });
-    }
-
-    const user = userResult.rows[0];
-
-    // Generate secure token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
-
-    // Invalidate any existing tokens for this user
-    await pool.query('UPDATE password_reset_tokens SET used = TRUE WHERE user_id = $1 AND used = FALSE', [user.id]);
-
-    // Store new token
-    await pool.query(
-      'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
-      [user.id, resetToken, expiresAt]
-    );
-
-    // Build reset URL
-    const resetUrl = `${process.env.APP_URL || 'http://localhost'}/reset-password/${resetToken}`;
-
-    // Send email using template
-    const emailResult = await emailService.sendTemplatedEmail('password_reset', email, {
-      firstName: user.first_name || 'User',
-      resetLink: resetUrl
-    });
-
-    if (!emailResult.success) {
-      console.error('Failed to send password reset email:', emailResult.error);
-    }
-
-    res.json({ message: 'If an account exists, a reset link has been sent.' });
-  } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Reset Password - Set new password
-app.post('/api/auth/reset-password', [
-  body('token').notEmpty(),
-  body('password').isLength({ min: 6 })
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { token, password } = req.body;
-
-  try {
-    // Find valid token
-    const tokenResult = await pool.query(
-      `SELECT prt.id, prt.user_id FROM password_reset_tokens prt
-       WHERE prt.token = $1 AND prt.used = FALSE AND prt.expires_at > NOW()`,
-      [token]
-    );
-
-    if (tokenResult.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired reset link' });
-    }
-
-    const resetToken = tokenResult.rows[0];
-
-    // Hash new password
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Update user password
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, resetToken.user_id]);
-
-    // Mark token as used
-    await pool.query('UPDATE password_reset_tokens SET used = TRUE WHERE id = $1', [resetToken.id]);
-
-    res.json({ message: 'Password reset successful' });
-  } catch (error) {
-    console.error('Reset password error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Change Password (authenticated user)
-app.post('/api/auth/change-password', authenticateToken, [
-  body('currentPassword').notEmpty(),
-  body('newPassword').isLength({ min: 6 })
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { currentPassword, newPassword } = req.body;
-
-  try {
-    // Get user's current password hash
-    const userResult = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.userId]);
-
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Verify current password
-    const validPassword = await bcrypt.compare(currentPassword, userResult.rows[0].password_hash);
-    if (!validPassword) {
-      return res.status(400).json({ error: 'Current password is incorrect' });
-    }
-
-    // Hash and save new password
-    const newPasswordHash = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newPasswordHash, req.user.userId]);
-
-    res.json({ message: 'Password changed successfully' });
-  } catch (error) {
-    console.error('Change password error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // Get current user
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
@@ -400,73 +222,6 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get user error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ============= ROOMS ROUTES =============
-
-// Get user's rooms
-app.get('/api/rooms', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT id, name, created_at FROM rooms WHERE user_id = $1 ORDER BY name ASC',
-      [req.user.userId]
-    );
-    res.json({ rooms: result.rows });
-  } catch (error) {
-    console.error('Get rooms error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Create a room
-app.post('/api/rooms', authenticateToken, [
-  body('name').trim().notEmpty().isLength({ max: 100 })
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { name } = req.body;
-
-  try {
-    // Check for duplicate room name for this user
-    const existing = await pool.query(
-      'SELECT id FROM rooms WHERE user_id = $1 AND LOWER(name) = LOWER($2)',
-      [req.user.userId, name]
-    );
-    if (existing.rows.length > 0) {
-      return res.status(400).json({ error: 'A room with this name already exists' });
-    }
-
-    const result = await pool.query(
-      'INSERT INTO rooms (user_id, name) VALUES ($1, $2) RETURNING id, name, created_at',
-      [req.user.userId, name]
-    );
-    res.status(201).json({ room: result.rows[0] });
-  } catch (error) {
-    console.error('Create room error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Delete a room
-app.delete('/api/rooms/:id', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'DELETE FROM rooms WHERE id = $1 AND user_id = $2 RETURNING id',
-      [req.params.id, req.user.userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Room not found' });
-    }
-
-    res.json({ message: 'Room deleted successfully' });
-  } catch (error) {
-    console.error('Delete room error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -515,13 +270,126 @@ app.post('/api/profile', authenticateToken, async (req, res) => {
 
 // ============= IMAGE ANALYSIS ROUTE =============
 
+// Helper function to calculate estimated cost (Claude Sonnet pricing)
+const calculateApiCost = (inputTokens, outputTokens) => {
+  // Claude Sonnet 4 pricing: $3/M input, $15/M output
+  const inputCost = (inputTokens / 1000000) * 3;
+  const outputCost = (outputTokens / 1000000) * 15;
+  return inputCost + outputCost;
+};
+
+// Helper function to log API usage
+const logApiUsage = async (userId, endpoint, model, inputTokens, outputTokens, success, errorMessage = null, usedUserKey = false) => {
+  try {
+    const estimatedCost = calculateApiCost(inputTokens, outputTokens);
+    await pool.query(
+      `INSERT INTO api_usage_logs (user_id, endpoint, model, input_tokens, output_tokens, estimated_cost, success, error_message, used_user_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [userId, endpoint, model, inputTokens, outputTokens, estimatedCost, success, errorMessage, usedUserKey]
+    );
+  } catch (err) {
+    console.error('Error logging API usage:', err);
+  }
+};
+
+// Helper function to check usage limits
+const checkUsageLimits = async (userId) => {
+  try {
+    // Get limit settings
+    const settingsResult = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('api_monthly_cost_limit', 'api_per_user_monthly_limit')"
+    );
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = parseFloat(row.setting_value);
+    });
+
+    const monthlyLimit = settings.api_monthly_cost_limit || 50;
+    const perUserLimit = settings.api_per_user_monthly_limit || 10;
+
+    // Get current month's usage
+    const totalUsageResult = await pool.query(
+      `SELECT COALESCE(SUM(estimated_cost), 0) as total_cost
+       FROM api_usage_logs
+       WHERE created_at >= date_trunc('month', CURRENT_DATE)
+       AND used_user_key = false`
+    );
+    const totalCost = parseFloat(totalUsageResult.rows[0].total_cost);
+
+    // Get user's current month usage
+    const userUsageResult = await pool.query(
+      `SELECT COALESCE(SUM(estimated_cost), 0) as user_cost
+       FROM api_usage_logs
+       WHERE user_id = $1
+       AND created_at >= date_trunc('month', CURRENT_DATE)
+       AND used_user_key = false`,
+      [userId]
+    );
+    const userCost = parseFloat(userUsageResult.rows[0].user_cost);
+
+    return {
+      allowed: totalCost < monthlyLimit && userCost < perUserLimit,
+      totalCost,
+      userCost,
+      monthlyLimit,
+      perUserLimit,
+      reason: totalCost >= monthlyLimit
+        ? 'Monthly system limit reached'
+        : userCost >= perUserLimit
+          ? 'Your monthly usage limit reached'
+          : null
+    };
+  } catch (err) {
+    console.error('Error checking usage limits:', err);
+    return { allowed: true }; // Allow on error to not block users
+  }
+};
+
 // Analyze image with Claude
 app.post('/api/analyze-image', authenticateToken, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No image file provided' });
   }
 
+  const modelName = 'claude-sonnet-4-20250514';
+  let usedUserKey = false;
+
   try {
+    // Check if user has their own API key
+    const userResult = await pool.query(
+      'SELECT anthropic_api_key FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+    const userApiKey = userResult.rows[0]?.anthropic_api_key;
+    usedUserKey = !!userApiKey;
+
+    // If not using user's key, check system usage limits
+    if (!usedUserKey) {
+      const limitCheck = await checkUsageLimits(req.user.userId);
+      if (!limitCheck.allowed) {
+        return res.status(429).json({
+          error: 'Usage limit exceeded',
+          message: limitCheck.reason + '. Add your own API key in settings to continue.',
+          userCost: limitCheck.userCost,
+          perUserLimit: limitCheck.perUserLimit
+        });
+      }
+    }
+
+    const apiKey = userApiKey || process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      return res.status(400).json({
+        error: 'No API key available',
+        message: 'Please add your Anthropic API key in settings or contact the administrator'
+      });
+    }
+
+    // Fetch categories from database for the prompt
+    const categoriesResult = await pool.query(
+      'SELECT slug FROM categories ORDER BY sort_order ASC, name ASC'
+    );
+    const categoryList = categoriesResult.rows.map(c => c.slug).join(', ');
+
     // Read the uploaded image file
     const imageBuffer = await fs.readFile(req.file.path);
     const base64Image = imageBuffer.toString('base64');
@@ -531,12 +399,12 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
 
     // Initialize Anthropic client
     const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY
+      apiKey: apiKey
     });
 
     // Send to Claude for analysis
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: modelName,
       max_tokens: 1024,
       messages: [
         {
@@ -557,7 +425,7 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
 {
   "name": "A brief, clear name for the item (e.g., 'Vintage Record Player', 'Winter Coat', 'Kitchen Blender')",
   "description": "A detailed description of the item including its appearance, condition, and any notable features (2-3 sentences)",
-  "category": "One of these categories: clothing, books, electronics, kitchen, decor, furniture, toys, tools, or other"
+  "category": "One of these categories: ${categoryList}"
 }
 
 Be specific and descriptive. If multiple items are visible, focus on the main/central item.`
@@ -566,6 +434,11 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
         },
       ],
     });
+
+    // Log successful API usage
+    const inputTokens = message.usage?.input_tokens || 0;
+    const outputTokens = message.usage?.output_tokens || 0;
+    await logApiUsage(req.user.userId, '/api/analyze-image', modelName, inputTokens, outputTokens, true, null, usedUserKey);
 
     // Parse Claude's response
     const responseText = message.content[0].text;
@@ -589,10 +462,12 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
       });
     }
 
-    // Validate the category
-    const validCategories = ['clothing', 'books', 'electronics', 'kitchen', 'decor', 'furniture', 'toys', 'tools', 'other'];
-    if (!validCategories.includes(analysisResult.category)) {
-      analysisResult.category = 'other';
+    // Validate the category against database
+    const validSlugs = categoriesResult.rows.map(c => c.slug.toLowerCase());
+    if (!validSlugs.includes(analysisResult.category?.toLowerCase())) {
+      // Get default category slug
+      const defaultResult = await pool.query('SELECT slug FROM categories WHERE is_default = true');
+      analysisResult.category = defaultResult.rows.length > 0 ? defaultResult.rows[0].slug : 'other';
     }
 
     res.json({
@@ -604,9 +479,15 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
   } catch (error) {
     console.error('Image analysis error:', error);
 
+    // Log failed API usage
+    await logApiUsage(req.user.userId, '/api/analyze-image', modelName, 0, 0, false, error.message, usedUserKey);
+
     if (error.status === 401) {
-      return res.status(500).json({
-        error: 'API key not configured. Please set ANTHROPIC_API_KEY environment variable.'
+      return res.status(401).json({
+        error: 'Invalid API key',
+        message: usedUserKey
+          ? 'Your API key is invalid. Please check your API key in settings.'
+          : 'System API key is not configured. Please add your own API key in settings.'
       });
     }
 
@@ -617,132 +498,26 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
   }
 });
 
-// ============= HOUSEHOLD MEMBERS ROUTES =============
-
-// Get all household members for user
-app.get('/api/household-members', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT id, name, relationship, created_at, updated_at FROM household_members WHERE user_id = $1 ORDER BY name ASC',
-      [req.user.userId]
-    );
-    res.json({ members: result.rows });
-  } catch (error) {
-    console.error('Get household members error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Create household member
-app.post('/api/household-members', authenticateToken, [
-  body('name').trim().notEmpty().isLength({ max: 100 })
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { name, relationship } = req.body;
-
-  try {
-    const result = await pool.query(
-      'INSERT INTO household_members (user_id, name, relationship) VALUES ($1, $2, $3) RETURNING *',
-      [req.user.userId, name, relationship || null]
-    );
-    res.status(201).json({ member: result.rows[0] });
-  } catch (error) {
-    console.error('Create household member error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Update household member
-app.put('/api/household-members/:id', authenticateToken, [
-  body('name').trim().notEmpty().isLength({ max: 100 })
-], async (req, res) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
-  const { name, relationship } = req.body;
-
-  try {
-    const result = await pool.query(
-      'UPDATE household_members SET name = $1, relationship = $2 WHERE id = $3 AND user_id = $4 RETURNING *',
-      [name, relationship || null, req.params.id, req.user.userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Household member not found' });
-    }
-
-    res.json({ member: result.rows[0] });
-  } catch (error) {
-    console.error('Update household member error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Delete household member
-app.delete('/api/household-members/:id', authenticateToken, async (req, res) => {
-  try {
-    const memberId = parseInt(req.params.id);
-
-    // First, remove this member from all items' owner_ids
-    await pool.query(
-      'UPDATE items SET owner_ids = array_remove(owner_ids, $1) WHERE user_id = $2',
-      [memberId, req.user.userId]
-    );
-
-    // Then delete the member
-    const result = await pool.query(
-      'DELETE FROM household_members WHERE id = $1 AND user_id = $2 RETURNING id',
-      [memberId, req.user.userId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Household member not found' });
-    }
-
-    res.json({ message: 'Household member deleted successfully' });
-  } catch (error) {
-    console.error('Delete household member error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // ============= ITEM ROUTES =============
 
 // Get all items for user
 app.get('/api/items', authenticateToken, async (req, res) => {
   try {
-    const { status, recommendation, ownerId } = req.query;
+    const { status, recommendation } = req.query;
     let query = 'SELECT * FROM items WHERE user_id = $1';
     const params = [req.user.userId];
-    let paramCount = 1;
 
     if (status) {
-      paramCount++;
-      query += ` AND status = $${paramCount}`;
+      query += ' AND status = $2';
       params.push(status);
     }
 
-    if (recommendation) {
-      paramCount++;
-      query += ` AND recommendation = $${paramCount}`;
+    if (recommendation && !status) {
+      query += ' AND recommendation = $2';
       params.push(recommendation);
-    }
-
-    // Filter by owner
-    if (ownerId === 'shared') {
-      // Items with no owners (shared items)
-      query += ' AND (owner_ids IS NULL OR owner_ids = \'{}\')';
-    } else if (ownerId) {
-      // Items belonging to specific owner
-      paramCount++;
-      query += ` AND $${paramCount} = ANY(owner_ids)`;
-      params.push(parseInt(ownerId));
+    } else if (recommendation && status) {
+      query += ' AND recommendation = $3';
+      params.push(recommendation);
     }
 
     query += ' ORDER BY created_at DESC';
@@ -776,7 +551,7 @@ app.get('/api/items/:id', authenticateToken, async (req, res) => {
 
 // Create item
 app.post('/api/items', authenticateToken, upload.single('image'), async (req, res) => {
-  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
+  const { name, description, location, category, recommendation, recommendationReasoning, answers, status } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
   if (req.file) {
@@ -785,20 +560,10 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
     console.log('No image file in request or upload failed');
   }
 
-  // Parse ownerIds from JSON string if provided
-  let parsedOwnerIds = [];
-  if (ownerIds) {
-    try {
-      parsedOwnerIds = JSON.parse(ownerIds);
-    } catch (e) {
-      console.error('Error parsing ownerIds:', e);
-    }
-  }
-
   try {
     const result = await pool.query(
-      `INSERT INTO items (user_id, name, description, location, category, image_url, recommendation, recommendation_reasoning, answers, status, owner_ids)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `INSERT INTO items (user_id, name, description, location, category, image_url, recommendation, recommendation_reasoning, answers, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING *`,
       [
         req.user.userId,
@@ -810,8 +575,7 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
         recommendation || null,
         recommendationReasoning || null,
         answers ? JSON.stringify(JSON.parse(answers)) : null,
-        status || 'pending',
-        parsedOwnerIds
+        status || 'pending'
       ]
     );
 
@@ -824,7 +588,7 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
 
 // Update item
 app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req, res) => {
-  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
+  const { name, description, location, category, recommendation, recommendationReasoning, answers, status } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
 
   try {
@@ -868,19 +632,6 @@ app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req,
     if (status !== undefined) {
       updates.push(`status = $${paramCount++}`);
       params.push(status);
-    }
-    if (ownerIds !== undefined) {
-      updates.push(`owner_ids = $${paramCount++}`);
-      // Parse ownerIds from JSON string if it's a string
-      let parsedOwnerIds = ownerIds;
-      if (typeof ownerIds === 'string') {
-        try {
-          parsedOwnerIds = JSON.parse(ownerIds);
-        } catch (e) {
-          parsedOwnerIds = [];
-        }
-      }
-      params.push(parsedOwnerIds);
     }
 
     if (updates.length === 0) {
@@ -953,6 +704,21 @@ app.get('/api/stats', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= CATEGORIES ROUTES =============
+
+// Get all categories (public - for dropdowns)
+app.get('/api/categories', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, slug, display_name, icon, color, sort_order, is_default FROM categories ORDER BY sort_order ASC, name ASC'
+    );
+    res.json({ categories: result.rows });
+  } catch (error) {
+    console.error('Get categories error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1186,10 +952,10 @@ app.post('/api/admin/email-templates', authenticateToken, requireAdmin, [
   }
 
   try {
-    const { name, subject, body, description, is_system } = req.body;
+    const { name, subject, body, description, trigger_event, is_enabled } = req.body;
     const result = await pool.query(
-      'INSERT INTO email_templates (name, subject, body, description, is_system) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [name, subject, body, description || null, is_system || false]
+      'INSERT INTO email_templates (name, subject, body, description, trigger_event, is_enabled) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [name, subject, body, description || null, trigger_event || null, is_enabled !== false]
     );
     res.status(201).json({ template: result.rows[0] });
   } catch (error) {
@@ -1204,10 +970,10 @@ app.post('/api/admin/email-templates', authenticateToken, requireAdmin, [
 // Update email template
 app.put('/api/admin/email-templates/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { subject, body, description, is_system } = req.body;
+    const { subject, body, description, trigger_event, is_enabled } = req.body;
     const result = await pool.query(
-      'UPDATE email_templates SET subject = $1, body = $2, description = $3, is_system = $4 WHERE id = $5 RETURNING *',
-      [subject, body, description || null, is_system || false, req.params.id]
+      'UPDATE email_templates SET subject = $1, body = $2, description = $3, trigger_event = $4, is_enabled = $5 WHERE id = $6 RETURNING *',
+      [subject, body, description || null, trigger_event || null, is_enabled !== false, req.params.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Template not found' });
@@ -1362,6 +1128,388 @@ app.post('/api/admin/announcements/:id/send', authenticateToken, requireAdmin, a
     }
   } catch (error) {
     console.error('Send announcement error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= ADMIN API USAGE ROUTES =============
+
+// Get API usage statistics
+app.get('/api/admin/api-usage/stats', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Get current month's total usage
+    const totalUsageResult = await pool.query(`
+      SELECT
+        COUNT(*) as total_calls,
+        SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful_calls,
+        SUM(CASE WHEN NOT success THEN 1 ELSE 0 END) as failed_calls,
+        COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+        COALESCE(SUM(estimated_cost), 0) as total_cost,
+        COALESCE(SUM(CASE WHEN used_user_key THEN estimated_cost ELSE 0 END), 0) as user_key_cost,
+        COALESCE(SUM(CASE WHEN NOT used_user_key THEN estimated_cost ELSE 0 END), 0) as system_key_cost
+      FROM api_usage_logs
+      WHERE created_at >= date_trunc('month', CURRENT_DATE)
+    `);
+
+    // Get daily usage for the current month
+    const dailyUsageResult = await pool.query(`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as calls,
+        SUM(CASE WHEN success THEN 1 ELSE 0 END) as successful,
+        SUM(CASE WHEN NOT success THEN 1 ELSE 0 END) as failed,
+        COALESCE(SUM(estimated_cost), 0) as cost
+      FROM api_usage_logs
+      WHERE created_at >= date_trunc('month', CURRENT_DATE)
+      GROUP BY DATE(created_at)
+      ORDER BY DATE(created_at)
+    `);
+
+    // Get top users by usage
+    const topUsersResult = await pool.query(`
+      SELECT
+        u.id,
+        u.email,
+        u.first_name,
+        u.last_name,
+        COUNT(*) as total_calls,
+        COALESCE(SUM(a.estimated_cost), 0) as total_cost,
+        SUM(CASE WHEN a.used_user_key THEN 1 ELSE 0 END) as user_key_calls
+      FROM api_usage_logs a
+      JOIN users u ON a.user_id = u.id
+      WHERE a.created_at >= date_trunc('month', CURRENT_DATE)
+      GROUP BY u.id, u.email, u.first_name, u.last_name
+      ORDER BY total_cost DESC
+      LIMIT 10
+    `);
+
+    // Get settings
+    const settingsResult = await pool.query(`
+      SELECT setting_key, setting_value
+      FROM system_settings
+      WHERE setting_key LIKE 'api_%'
+    `);
+    const settings = {};
+    settingsResult.rows.forEach(row => {
+      settings[row.setting_key] = row.setting_value;
+    });
+
+    const stats = totalUsageResult.rows[0];
+    res.json({
+      currentMonth: {
+        totalCalls: parseInt(stats.total_calls),
+        successfulCalls: parseInt(stats.successful_calls),
+        failedCalls: parseInt(stats.failed_calls),
+        successRate: stats.total_calls > 0
+          ? ((stats.successful_calls / stats.total_calls) * 100).toFixed(1)
+          : 0,
+        totalInputTokens: parseInt(stats.total_input_tokens),
+        totalOutputTokens: parseInt(stats.total_output_tokens),
+        totalCost: parseFloat(stats.total_cost).toFixed(4),
+        userKeyCost: parseFloat(stats.user_key_cost).toFixed(4),
+        systemKeyCost: parseFloat(stats.system_key_cost).toFixed(4)
+      },
+      dailyUsage: dailyUsageResult.rows.map(row => ({
+        date: row.date,
+        calls: parseInt(row.calls),
+        successful: parseInt(row.successful),
+        failed: parseInt(row.failed),
+        cost: parseFloat(row.cost).toFixed(4)
+      })),
+      topUsers: topUsersResult.rows.map(row => ({
+        id: row.id,
+        email: row.email,
+        name: `${row.first_name} ${row.last_name}`,
+        totalCalls: parseInt(row.total_calls),
+        totalCost: parseFloat(row.total_cost).toFixed(4),
+        userKeyCalls: parseInt(row.user_key_calls)
+      })),
+      settings: {
+        monthlyLimit: parseFloat(settings.api_monthly_cost_limit || 50),
+        perUserLimit: parseFloat(settings.api_per_user_monthly_limit || 10),
+        alertThreshold: parseInt(settings.api_alert_threshold_percent || 80),
+        alertsEnabled: settings.api_usage_alerts_enabled === 'true'
+      }
+    });
+  } catch (error) {
+    console.error('Get API usage stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get API usage logs (paginated)
+app.get('/api/admin/api-usage/logs', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    const logsResult = await pool.query(`
+      SELECT a.*, u.email, u.first_name, u.last_name
+      FROM api_usage_logs a
+      LEFT JOIN users u ON a.user_id = u.id
+      ORDER BY a.created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [limit, offset]);
+
+    const countResult = await pool.query('SELECT COUNT(*) FROM api_usage_logs');
+    const totalCount = parseInt(countResult.rows[0].count);
+
+    res.json({
+      logs: logsResult.rows,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit)
+      }
+    });
+  } catch (error) {
+    console.error('Get API usage logs error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update API usage settings
+app.put('/api/admin/api-usage/settings', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { monthlyLimit, perUserLimit, alertThreshold, alertsEnabled } = req.body;
+
+    const updates = [
+      ['api_monthly_cost_limit', monthlyLimit?.toString()],
+      ['api_per_user_monthly_limit', perUserLimit?.toString()],
+      ['api_alert_threshold_percent', alertThreshold?.toString()],
+      ['api_usage_alerts_enabled', alertsEnabled?.toString()]
+    ].filter(([key, value]) => value !== undefined);
+
+    for (const [key, value] of updates) {
+      await pool.query(
+        `INSERT INTO system_settings (setting_key, setting_value)
+         VALUES ($1, $2)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP`,
+        [key, value]
+      );
+    }
+
+    res.json({ message: 'Settings updated successfully' });
+  } catch (error) {
+    console.error('Update API usage settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= ADMIN CATEGORIES ROUTES =============
+
+// Get all categories with item counts (admin)
+app.get('/api/admin/categories', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT c.*, COUNT(i.id) as item_count
+      FROM categories c
+      LEFT JOIN items i ON LOWER(i.category) = LOWER(c.slug)
+      GROUP BY c.id
+      ORDER BY c.sort_order ASC, c.name ASC
+    `);
+    res.json({ categories: result.rows });
+  } catch (error) {
+    console.error('Get admin categories error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get single category (admin)
+app.get('/api/admin/categories/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM categories WHERE id = $1',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    res.json({ category: result.rows[0] });
+  } catch (error) {
+    console.error('Get category error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create category (admin)
+app.post('/api/admin/categories', authenticateToken, requireAdmin, [
+  body('name').trim().notEmpty(),
+  body('display_name').trim().notEmpty()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { name, display_name, icon, color, sort_order, is_default } = req.body;
+    const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+    // If setting as default, unset other defaults
+    if (is_default) {
+      await pool.query('UPDATE categories SET is_default = false WHERE is_default = true');
+    }
+
+    const result = await pool.query(
+      `INSERT INTO categories (name, slug, display_name, icon, color, sort_order, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [name, slug, display_name, icon || null, color || null, sort_order || 0, is_default || false]
+    );
+    res.status(201).json({ category: result.rows[0] });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Category name or slug already exists' });
+    }
+    console.error('Create category error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update category (admin)
+app.put('/api/admin/categories/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { name, display_name, icon, color, sort_order, is_default } = req.body;
+    const slug = name ? name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') : undefined;
+
+    // Get current category to check old slug for item updates
+    const currentResult = await pool.query('SELECT slug FROM categories WHERE id = $1', [req.params.id]);
+    if (currentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+    const oldSlug = currentResult.rows[0].slug;
+
+    // If setting as default, unset other defaults
+    if (is_default) {
+      await pool.query('UPDATE categories SET is_default = false WHERE is_default = true AND id != $1', [req.params.id]);
+    }
+
+    const result = await pool.query(
+      `UPDATE categories SET
+        name = COALESCE($1, name),
+        slug = COALESCE($2, slug),
+        display_name = COALESCE($3, display_name),
+        icon = COALESCE($4, icon),
+        color = COALESCE($5, color),
+        sort_order = COALESCE($6, sort_order),
+        is_default = COALESCE($7, is_default)
+       WHERE id = $8 RETURNING *`,
+      [name, slug, display_name, icon, color, sort_order, is_default, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    // Update items if slug changed
+    if (slug && slug !== oldSlug) {
+      await pool.query(
+        'UPDATE items SET category = $1 WHERE LOWER(category) = LOWER($2)',
+        [slug, oldSlug]
+      );
+    }
+
+    res.json({ category: result.rows[0] });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(400).json({ error: 'Category name or slug already exists' });
+    }
+    console.error('Update category error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete category (admin) - moves items to default category
+app.delete('/api/admin/categories/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    // Get the category to delete
+    const categoryResult = await pool.query('SELECT * FROM categories WHERE id = $1', [req.params.id]);
+    if (categoryResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Category not found' });
+    }
+
+    const category = categoryResult.rows[0];
+
+    // Cannot delete the default category
+    if (category.is_default) {
+      return res.status(400).json({ error: 'Cannot delete the default category' });
+    }
+
+    // Get the default category
+    const defaultResult = await pool.query('SELECT slug FROM categories WHERE is_default = true');
+    const defaultSlug = defaultResult.rows.length > 0 ? defaultResult.rows[0].slug : 'other';
+
+    // Move items to default category
+    await pool.query(
+      'UPDATE items SET category = $1 WHERE LOWER(category) = LOWER($2)',
+      [defaultSlug, category.slug]
+    );
+
+    // Delete the category
+    await pool.query('DELETE FROM categories WHERE id = $1', [req.params.id]);
+
+    res.json({ message: 'Category deleted successfully', movedToCategory: defaultSlug });
+  } catch (error) {
+    console.error('Delete category error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Merge categories (admin) - merge source into target
+app.post('/api/admin/categories/merge', authenticateToken, requireAdmin, [
+  body('sourceId').isInt(),
+  body('targetId').isInt()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  try {
+    const { sourceId, targetId } = req.body;
+
+    if (sourceId === targetId) {
+      return res.status(400).json({ error: 'Source and target categories must be different' });
+    }
+
+    // Get both categories
+    const sourceResult = await pool.query('SELECT * FROM categories WHERE id = $1', [sourceId]);
+    const targetResult = await pool.query('SELECT * FROM categories WHERE id = $1', [targetId]);
+
+    if (sourceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Source category not found' });
+    }
+    if (targetResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Target category not found' });
+    }
+
+    const sourceCategory = sourceResult.rows[0];
+    const targetCategory = targetResult.rows[0];
+
+    // Cannot merge default category into another
+    if (sourceCategory.is_default) {
+      return res.status(400).json({ error: 'Cannot merge the default category' });
+    }
+
+    // Move all items from source to target
+    const updateResult = await pool.query(
+      'UPDATE items SET category = $1 WHERE LOWER(category) = LOWER($2)',
+      [targetCategory.slug, sourceCategory.slug]
+    );
+
+    // Delete source category
+    await pool.query('DELETE FROM categories WHERE id = $1', [sourceId]);
+
+    res.json({
+      message: 'Categories merged successfully',
+      itemsMoved: updateResult.rowCount,
+      targetCategory: targetCategory
+    });
+  } catch (error) {
+    console.error('Merge categories error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -111,6 +111,7 @@ function AdminUsers({ setIsAuthenticated }) {
           <Link to="/admin" className="nav-link">Admin Dashboard</Link>
           <Link to="/admin/users" className="nav-link active">Users</Link>
           <Link to="/admin/categories" className="nav-link">Categories</Link>
+          <Link to="/admin/api-usage" className="nav-link">API Usage</Link>
           <Link to="/admin/email-templates" className="nav-link">Email Templates</Link>
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>

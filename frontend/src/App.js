@@ -19,6 +19,7 @@ import AdminSettings from './pages/AdminSettings';
 import AdminEmailTemplates from './pages/AdminEmailTemplates';
 import AdminAnnouncements from './pages/AdminAnnouncements';
 import AdminCategories from './pages/AdminCategories';
+import AdminApiUsage from './pages/AdminApiUsage';
 import './App.css';
 
 function App() {
@@ -112,6 +113,9 @@ function App() {
         } />
         <Route path="/admin/categories" element={
           isAuthenticated ? <AdminCategories setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/api-usage" element={
+          isAuthenticated ? <AdminApiUsage setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
           </Routes>

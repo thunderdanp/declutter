@@ -55,6 +55,8 @@ function AdminDashboard({ setIsAuthenticated }) {
         <div className="nav-links">
           <Link to="/admin" className="nav-link active">Admin Dashboard</Link>
           <Link to="/admin/users" className="nav-link">Users</Link>
+          <Link to="/admin/categories" className="nav-link">Categories</Link>
+          <Link to="/admin/api-usage" className="nav-link">API Usage</Link>
           <Link to="/admin/email-templates" className="nav-link">Email Templates</Link>
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>
@@ -135,6 +137,12 @@ function AdminDashboard({ setIsAuthenticated }) {
                 <div className="action-icon">👥</div>
                 <h3>Manage Users</h3>
                 <p>View, approve, and manage user accounts</p>
+              </Link>
+
+              <Link to="/admin/categories" className="admin-action-card">
+                <div className="action-icon">🏷️</div>
+                <h3>Categories</h3>
+                <p>Manage item categories and organize items</p>
               </Link>
 
               <Link to="/admin/email-templates" className="admin-action-card">

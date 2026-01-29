@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
+import { CategoryProvider } from './context/CategoryContext';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -12,24 +13,14 @@ import PersonalityProfile from './pages/PersonalityProfile';
 import EvaluateItem from './pages/EvaluateItem';
 import ItemHistory from './pages/ItemHistory';
 import ItemDetail from './pages/ItemDetail';
-import HouseholdMembers from './pages/HouseholdMembers';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
 import AdminEmailTemplates from './pages/AdminEmailTemplates';
 import AdminAnnouncements from './pages/AdminAnnouncements';
+import AdminCategories from './pages/AdminCategories';
+import AdminApiUsage from './pages/AdminApiUsage';
 import './App.css';
-
-// Scroll to top on route change
-function ScrollToTop() {
-  const { pathname } = useLocation();
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [pathname]);
-
-  return null;
-}
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -72,9 +63,9 @@ function App() {
 
   return (
     <ThemeProvider>
-      <Router>
-        <ScrollToTop />
-        <Routes>
+      <CategoryProvider>
+        <Router>
+          <Routes>
         <Route path="/login" element={
           isAuthenticated ? <Navigate to="/dashboard" /> : <Login setIsAuthenticated={setIsAuthenticated} />
         } />
@@ -96,14 +87,11 @@ function App() {
         <Route path="/evaluate" element={
           isAuthenticated ? <EvaluateItem setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
-        <Route path="/my_items" element={
+        <Route path="/my-items" element={
           isAuthenticated ? <ItemHistory setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/settings" element={
           isAuthenticated ? <Settings setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
-        } />
-        <Route path="/household" element={
-          isAuthenticated ? <HouseholdMembers setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/items/:id" element={
           isAuthenticated ? <ItemDetail setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
@@ -123,9 +111,16 @@ function App() {
         <Route path="/admin/announcements" element={
           isAuthenticated ? <AdminAnnouncements setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
+        <Route path="/admin/categories" element={
+          isAuthenticated ? <AdminCategories setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/api-usage" element={
+          isAuthenticated ? <AdminApiUsage setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
         <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
-        </Routes>
-      </Router>
+          </Routes>
+        </Router>
+      </CategoryProvider>
     </ThemeProvider>
   );
 }
