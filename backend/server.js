@@ -376,7 +376,18 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
       }
     }
 
-    const apiKey = userApiKey || process.env.ANTHROPIC_API_KEY;
+    // Get system API key (database takes priority over environment)
+    let systemApiKey = process.env.ANTHROPIC_API_KEY;
+    if (!userApiKey) {
+      const sysKeyResult = await pool.query(
+        "SELECT setting_value FROM system_settings WHERE setting_key = 'anthropic_api_key'"
+      );
+      if (sysKeyResult.rows[0]?.setting_value) {
+        systemApiKey = sysKeyResult.rows[0].setting_value;
+      }
+    }
+
+    const apiKey = userApiKey || systemApiKey;
     if (!apiKey) {
       return res.status(400).json({
         error: 'No API key available',
@@ -958,6 +969,70 @@ app.post('/api/admin/smtp/test', authenticateToken, requireAdmin, async (req, re
   } catch (error) {
     console.error('Test SMTP error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============= ADMIN API KEY SETTINGS =============
+
+// Get system API key status
+app.get('/api/admin/api-key', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT setting_value FROM system_settings WHERE setting_key = 'anthropic_api_key'"
+    );
+    const dbKey = result.rows[0]?.setting_value;
+    const envKey = process.env.ANTHROPIC_API_KEY;
+
+    res.json({
+      hasDbKey: !!dbKey,
+      dbKeyPreview: dbKey ? `sk-...${dbKey.slice(-4)}` : null,
+      hasEnvKey: !!envKey,
+      envKeyPreview: envKey ? `sk-...${envKey.slice(-4)}` : null,
+      activeSource: dbKey ? 'database' : (envKey ? 'environment' : 'none')
+    });
+  } catch (error) {
+    console.error('Get API key error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update system API key
+app.put('/api/admin/api-key', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { api_key, clear_key } = req.body;
+
+    if (clear_key) {
+      await pool.query(
+        "DELETE FROM system_settings WHERE setting_key = 'anthropic_api_key'"
+      );
+      const envKey = process.env.ANTHROPIC_API_KEY;
+      return res.json({
+        message: 'API key removed from database',
+        hasDbKey: false,
+        hasEnvKey: !!envKey,
+        activeSource: envKey ? 'environment' : 'none'
+      });
+    }
+
+    if (!api_key) {
+      return res.status(400).json({ error: 'API key is required' });
+    }
+
+    await pool.query(`
+      INSERT INTO system_settings (setting_key, setting_value)
+      VALUES ('anthropic_api_key', $1)
+      ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
+    `, [api_key]);
+
+    res.json({
+      message: 'API key saved successfully',
+      hasDbKey: true,
+      dbKeyPreview: `sk-...${api_key.slice(-4)}`,
+      activeSource: 'database'
+    });
+  } catch (error) {
+    console.error('Update API key error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

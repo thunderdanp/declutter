@@ -13,17 +13,27 @@ function AdminSettings({ setIsAuthenticated }) {
     smtp_password: '',
     smtp_from_address: ''
   });
+  const [apiKeyStatus, setApiKeyStatus] = useState({
+    hasDbKey: false,
+    dbKeyPreview: null,
+    hasEnvKey: false,
+    activeSource: 'none'
+  });
+  const [newApiKey, setNewApiKey] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [testingSmtp, setTestingSmtp] = useState(false);
+  const [savingApiKey, setSavingApiKey] = useState(false);
   const [message, setMessage] = useState('');
   const [smtpMessage, setSmtpMessage] = useState('');
+  const [apiKeyMessage, setApiKeyMessage] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchSettings();
     fetchSmtpSettings();
+    fetchApiKeyStatus();
   }, []);
 
   const fetchSettings = async () => {
@@ -65,6 +75,90 @@ function AdminSettings({ setIsAuthenticated }) {
       }
     } catch (error) {
       console.error('Error fetching SMTP settings:', error);
+    }
+  };
+
+  const fetchApiKeyStatus = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/api-key', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setApiKeyStatus(data);
+      }
+    } catch (error) {
+      console.error('Error fetching API key status:', error);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!newApiKey.trim()) {
+      setApiKeyMessage('Please enter an API key');
+      return;
+    }
+
+    setSavingApiKey(true);
+    setApiKeyMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/api-key', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ api_key: newApiKey })
+      });
+
+      if (response.ok) {
+        setApiKeyMessage('API key saved successfully!');
+        setNewApiKey('');
+        fetchApiKeyStatus();
+        setTimeout(() => setApiKeyMessage(''), 3000);
+      } else {
+        setApiKeyMessage('Failed to save API key');
+      }
+    } catch (error) {
+      console.error('Error saving API key:', error);
+      setApiKeyMessage('Failed to save API key');
+    } finally {
+      setSavingApiKey(false);
+    }
+  };
+
+  const handleClearApiKey = async () => {
+    if (!window.confirm('Remove the API key from database? Will fall back to environment variable if set.')) return;
+
+    setSavingApiKey(true);
+    setApiKeyMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/api-key', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ clear_key: true })
+      });
+
+      if (response.ok) {
+        setApiKeyMessage('API key removed');
+        fetchApiKeyStatus();
+        setTimeout(() => setApiKeyMessage(''), 3000);
+      } else {
+        setApiKeyMessage('Failed to remove API key');
+      }
+    } catch (error) {
+      console.error('Error removing API key:', error);
+      setApiKeyMessage('Failed to remove API key');
+    } finally {
+      setSavingApiKey(false);
     }
   };
 
@@ -328,6 +422,78 @@ function AdminSettings({ setIsAuthenticated }) {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="settings-section">
+              <h2 className="settings-section-title">Anthropic API Key</h2>
+              <p className="form-help" style={{ marginBottom: '1.5rem' }}>
+                Configure the system API key for Claude image analysis. Database setting takes priority over environment variable.
+              </p>
+
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>Current Status:</strong>{' '}
+                  {apiKeyStatus.activeSource === 'database' && (
+                    <span className="status-badge status-approved">Using Database Key ({apiKeyStatus.dbKeyPreview})</span>
+                  )}
+                  {apiKeyStatus.activeSource === 'environment' && (
+                    <span className="status-badge status-info">Using Environment Variable ({apiKeyStatus.envKeyPreview})</span>
+                  )}
+                  {apiKeyStatus.activeSource === 'none' && (
+                    <span className="status-badge status-pending">No API Key Configured</span>
+                  )}
+                </div>
+                {apiKeyStatus.hasEnvKey && apiKeyStatus.hasDbKey && (
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+                    Environment variable is set but database key takes priority.
+                  </p>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="api_key">
+                  {apiKeyStatus.hasDbKey ? 'Update API Key' : 'Set API Key'}
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="password"
+                    id="api_key"
+                    className="form-control"
+                    placeholder="sk-ant-..."
+                    value={newApiKey}
+                    onChange={(e) => setNewApiKey(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSaveApiKey}
+                    disabled={savingApiKey || !newApiKey.trim()}
+                  >
+                    {savingApiKey ? 'Saving...' : 'Save'}
+                  </button>
+                  {apiKeyStatus.hasDbKey && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleClearApiKey}
+                      disabled={savingApiKey}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p className="form-help">
+                  Get your API key from{' '}
+                  <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">
+                    console.anthropic.com
+                  </a>
+                </p>
+              </div>
+
+              {apiKeyMessage && (
+                <div className={`message ${apiKeyMessage.includes('success') || apiKeyMessage.includes('removed') ? 'message-success' : 'message-error'}`}>
+                  {apiKeyMessage}
+                </div>
+              )}
             </div>
           </div>
         )}
