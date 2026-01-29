@@ -1,183 +1,200 @@
-# Declutter Assistant - Complete Package
+# Declutter Assistant
 
-🏠 Smart home organization and decluttering assistant with AI-powered recommendations.
+🏠 **Smart home organization and decluttering assistant with AI-powered recommendations.**
 
-## 📦 What's in This Package
+Help users make decisions about their belongings through personalized recommendations based on usage patterns, sentimental value, condition, and space constraints.
 
-This is the **complete source and deployment package** for Declutter Assistant. Choose your path based on what you want to do:
-
-### 🎯 Quick Navigation
-
-- **I want to BUILD the Docker image** → See [Building](#building-the-docker-image)
-- **I want to DEPLOY for users** → See [Deployment](#deployment-options)
-- **I want to UPLOAD to GitHub** → See [GitHub Setup](#github-setup)
-- **I want to use REVERSE PROXY** → See [Reverse Proxy](#reverse-proxy-setup)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
+![Node](https://img.shields.io/badge/node-18+-green.svg)
+![React](https://img.shields.io/badge/react-18-blue.svg)
 
 ---
 
-## 🔨 Building the Docker Image
+## ✨ Features
 
-**⚠️ IMPORTANT:** You must build and push the Docker image to Docker Hub BEFORE users can deploy with the zero-setup method.
+### For Users
+| Feature | Description |
+|---------|-------------|
+| 🔐 **Secure Auth** | JWT-based authentication with password reset |
+| 👤 **Personality Profiles** | Customized recommendations based on decluttering style |
+| 📸 **Image Upload** | Photo documentation with optional AI analysis |
+| 🤖 **Smart Recommendations** | AI suggests: keep, sell, donate, storage, or discard |
+| ✅ **Decision Tracking** | Record what you actually did with each item |
+| 👨‍👩‍👧‍👦 **Household Members** | Attribute items to family members |
+| 📊 **Progress Dashboard** | Track your decluttering journey |
+| 🌙 **Dark Mode** | Light and dark theme support |
 
-### Choose Your Platform:
-
-#### macOS Users (Intel or Apple Silicon)
-```bash
-./build-and-push-macos.sh
-```
-📖 Full guide: [MACOS-BUILD-GUIDE.md](MACOS-BUILD-GUIDE.md)
-
-#### Windows Users
-```powershell
-.\build-and-push.ps1
-```
-📖 Full guide: [WINDOWS-BUILD-GUIDE.md](WINDOWS-BUILD-GUIDE.md)
-
-#### Linux Users
-```bash
-./build-and-push.sh
-```
-📖 Full guide: [BUILD-IMAGE-FIRST.md](BUILD-IMAGE-FIRST.md)
-
-### Or Use GitHub Actions (Automated)
-
-1. Upload this package to GitHub
-2. Configure Docker Hub secrets
-3. GitHub automatically builds and pushes
-
-📖 Full guide: [GITHUB-SETUP.md](GITHUB-SETUP.md)
+### For Admins
+| Feature | Description |
+|---------|-------------|
+| 👥 **User Management** | Approve, manage, and monitor users |
+| 📧 **Email Templates** | Customizable email communications |
+| 📢 **Announcements** | Broadcast updates to all users |
+| 🏷️ **Categories** | Create and organize item categories |
+| ⚙️ **Recommendation Tuning** | Adjust scoring weights and strategies |
+| 🧪 **A/B Testing** | Compare different recommendation strategies |
+| 📈 **Analytics Dashboard** | Item trends, user activity, conversion rates |
+| 💰 **API Monitoring** | Track AI API usage and costs |
 
 ---
 
-## 🚀 Deployment Options
+## 🚀 Quick Start
 
-### Option 1: Zero-Setup Deployment (Recommended for Users)
+### Prerequisites
+- [Docker](https://www.docker.com/get-started) and Docker Compose
+- [Anthropic API Key](https://console.anthropic.com/) (optional, for AI image analysis)
 
-**Requirements:** Docker image must exist on Docker Hub first!
+### Deploy with Pre-built Image
 
-Users download `declutter-zero-setup.zip` (separate package) and run:
 ```bash
+# 1. Create a project directory
+mkdir declutter && cd declutter
+
+# 2. Create docker-compose.yml
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+services:
+  app:
+    image: thunderdanp/declutter:latest
+    ports:
+      - "3000:80"
+    environment:
+      - DATABASE_URL=postgresql://declutter_user:declutter_password@db:5432/declutter_db
+      - JWT_SECRET=change-this-to-a-secure-random-string
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    depends_on:
+      - db
+    volumes:
+      - uploads:/app/backend/uploads
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=declutter_user
+      - POSTGRES_PASSWORD=declutter_password
+      - POSTGRES_DB=declutter_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+  uploads:
+EOF
+
+# 3. Start the application
 docker-compose up -d
+
+# 4. Open http://localhost:3000
 ```
 
-- ✅ No source code needed
-- ✅ No build time
-- ✅ Instant deployment
-- ✅ Pre-built image from Docker Hub
+### First User = Admin
+The first user to register automatically becomes an admin.
 
-📖 Guide: [DEPLOY-PREBUILT.md](DEPLOY-PREBUILT.md)
+---
 
-### Option 2: Build from Source
+## 🔨 Development Setup
 
-Users have full source code and build locally:
+### Build from Source
+
 ```bash
+# Clone the repository
+git clone https://github.com/thunderdanp/declutter.git
+cd declutter
+
+# Start with local build
 docker-compose up --build -d
 ```
 
-- ✅ Full control over source
-- ✅ Can modify application
-- ⏱️ Takes 3-5 minutes to build
+### Build and Push Docker Image
 
-📖 Guide: [QUICKSTART.md](QUICKSTART.md)
+```bash
+# Navigate to docker-build directory
+cd docker-build
 
----
-
-## 📁 Package Contents
-
+# Build for linux/amd64 and push to Docker Hub
+docker buildx build --platform linux/amd64 -t thunderdanp/declutter:latest --push .
 ```
-declutter-assistant/
-├── 📖 Documentation
-│   ├── README.md (this file)
-│   ├── MACOS-BUILD-GUIDE.md         ← macOS build instructions
-│   ├── WINDOWS-BUILD-GUIDE.md       ← Windows build instructions
-│   ├── BUILD-IMAGE-FIRST.md         ← Linux/general build guide
-│   ├── QUICKSTART.md                ← Quick setup guide
-│   ├── DEPLOY-PREBUILT.md           ← Zero-setup deployment
-│   ├── REVERSE-PROXY-SETUP.md       ← Synology/proxy config
-│   ├── GITHUB-SETUP.md              ← GitHub Actions setup
-│   └── DOCKER-BUILD.md              ← Docker image details
-│
-├── 🔨 Build Scripts
-│   ├── build-and-push-macos.sh      ← macOS build script
-│   ├── build-and-push.ps1           ← Windows PowerShell script
-│   ├── build-and-push.sh            ← Linux bash script
-│   └── validate-structure.sh        ← Pre-build validator
-│
-├── 🐳 Docker Configuration
-│   ├── docker-compose.yml           ← Build from source
-│   ├── docker-compose-simple.yml    ← Pre-built image
-│   ├── docker-compose-hub.yml       ← Pre-built (alt)
-│   └── docker-compose-minimal.yml   ← Minimal config
-│
-├── 🏗️ Source Code
-│   ├── backend/                     ← Node.js/Express API
-│   ├── frontend/                    ← React application
-│   ├── docker-build/                ← Combined image build
-│   └── init.sql                     ← Database schema
-│
-├── ⚙️ Configuration
-│   ├── .env.example                 ← Environment variables
-│   ├── .gitignore                   ← Git ignore rules
-│   └── .gitattributes               ← Git attributes
-│
-└── 🤖 GitHub Actions
-    └── .github/workflows/
-        └── docker-build.yml         ← Auto-build on push
+
+### Development Workflow
+
+```bash
+# 1. Make changes in frontend/ or backend/
+
+# 2. Sync to docker-build (includes bcrypt fix for Alpine)
+cp -r frontend/* docker-build/frontend/
+cp -r backend/* docker-build/backend/
+sed -i '' "s/require('bcrypt')/require('bcryptjs')/g" docker-build/backend/server.js
+sed -i '' 's/"bcrypt": "^5.1.1"/"bcryptjs": "^2.4.3"/g' docker-build/backend/package.json
+
+# 3. Build and push
+cd docker-build
+docker buildx build --platform linux/amd64 -t thunderdanp/declutter:latest --push .
 ```
 
 ---
 
-## 🎯 Common Workflows
+## 🏗️ Architecture
 
-### Workflow 1: First-Time Setup (You're the Developer)
-
-1. **Build the image:**
-   ```bash
-   ./build-and-push-macos.sh  # or .ps1 for Windows
-   ```
-
-2. **Verify on Docker Hub:**
-   Visit https://hub.docker.com/r/thunderdanp/declutter
-
-3. **Share with users:**
-   Give them `declutter-zero-setup.zip` (created separately)
-
-### Workflow 2: Development & Testing
-
-1. **Make code changes** in `backend/` or `frontend/`
-
-2. **Test locally:**
-   ```bash
-   docker-compose up --build
-   ```
-
-3. **Push updates:**
-   ```bash
-   ./build-and-push-macos.sh
-   ```
-
-### Workflow 3: GitHub-Based Deployment
-
-1. **Upload to GitHub:**
-   See [GITHUB-SETUP.md](GITHUB-SETUP.md)
-
-2. **Configure secrets:**
-   Add DOCKERHUB_USERNAME and DOCKERHUB_TOKEN
-
-3. **Automatic builds:**
-   Every push triggers new Docker image
+```
+┌─────────────────────────────────────────────┐
+│                Host Machine                  │
+│                                             │
+│    Port 3000 ─────┐                         │
+│                   │                          │
+│    ┌──────────────┼────────────────────┐    │
+│    │   Docker     │                    │    │
+│    │              ▼                    │    │
+│    │   ┌──────────────────┐            │    │
+│    │   │  App Container   │            │    │
+│    │   │  ┌────────────┐  │            │    │
+│    │   │  │   Nginx    │  │ ← Static   │    │
+│    │   │  │   :80      │  │   files    │    │
+│    │   │  └─────┬──────┘  │            │    │
+│    │   │        │         │            │    │
+│    │   │  ┌─────▼──────┐  │            │    │
+│    │   │  │  Node.js   │  │ ← API      │    │
+│    │   │  │   :3001    │  │            │    │
+│    │   │  └─────┬──────┘  │            │    │
+│    │   └────────┼─────────┘            │    │
+│    │            │                      │    │
+│    │   ┌────────▼─────────┐            │    │
+│    │   │   PostgreSQL     │ ← Database │    │
+│    │   │      :5432       │            │    │
+│    │   └──────────────────┘            │    │
+│    └───────────────────────────────────┘    │
+└─────────────────────────────────────────────┘
+```
 
 ---
 
-## 🌐 Reverse Proxy Setup
+## 🛠️ Tech Stack
 
-Deploy behind Synology, Nginx, Traefik, or other reverse proxies:
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | React 18, React Router v6, Context API, CSS Variables |
+| **Backend** | Node.js, Express.js, JWT Auth, Multer |
+| **Database** | PostgreSQL 15 |
+| **AI** | Anthropic Claude API |
+| **Email** | Nodemailer |
+| **Infrastructure** | Docker, Nginx, Multi-stage builds |
 
-1. Start application: `docker-compose up -d`
-2. Configure reverse proxy to `localhost:3000`
-3. Add SSL certificate
+---
 
-📖 Complete guide: [REVERSE-PROXY-SETUP.md](REVERSE-PROXY-SETUP.md)
+## 📖 API Documentation
+
+Full API documentation available at [docs/API.md](docs/API.md).
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register new user |
+| POST | `/api/auth/login` | User login |
+| GET | `/api/items` | Get user's items |
+| POST | `/api/items` | Create item with image |
+| PUT | `/api/items/:id/decision` | Record item decision |
+| GET | `/api/admin/analytics/summary` | Analytics overview |
 
 ---
 
@@ -185,223 +202,130 @@ Deploy behind Synology, Nginx, Traefik, or other reverse proxies:
 
 ### Environment Variables
 
-Create `.env` file or edit `docker-compose.yml`:
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `JWT_SECRET` | Secret for JWT signing | Yes |
+| `ANTHROPIC_API_KEY` | Claude API key for AI features | No |
+| `SMTP_HOST` | Email server host | No |
+| `SMTP_PORT` | Email server port | No |
+| `SMTP_USER` | Email username | No |
+| `SMTP_PASS` | Email password | No |
 
-```env
-# Database
-POSTGRES_PASSWORD=your-secure-password
+### Database Migrations
 
-# JWT Secret (IMPORTANT: Change in production!)
-JWT_SECRET=your-very-long-random-secret-key
+When updating to a new version, run any required migrations:
 
-# Anthropic API Key (Required for AI image analysis)
-# Get your key from: https://console.anthropic.com/
-ANTHROPIC_API_KEY=your-anthropic-api-key
-
-# Port
-PORT=3000
-```
-
-### Change Port
-
-Edit `docker-compose.yml`:
-```yaml
-ports:
-  - "8080:80"  # Change 3000 to 8080
+```bash
+# Add new columns for analytics
+docker exec declutter_db psql -U declutter_user -d declutter_db -c "
+  ALTER TABLE items ADD COLUMN IF NOT EXISTS decision VARCHAR(50);
+  ALTER TABLE items ADD COLUMN IF NOT EXISTS original_recommendation VARCHAR(50);
+"
 ```
 
 ---
 
-## 📊 Architecture
+## 📁 Project Structure
 
 ```
-┌─────────────────────────────────────┐
-│  Host Machine                       │
-│                                     │
-│  Port 3000 ──┐                     │
-│              │                      │
-│  ┌───────────┼─────────────────┐   │
-│  │ Docker    │                 │   │
-│  │           ▼                 │   │
-│  │  ┌─────────────────┐        │   │
-│  │  │ App Container   │        │   │
-│  │  │ - Nginx         │        │   │
-│  │  │ - Node.js       │        │   │
-│  │  └────────┬────────┘        │   │
-│  │           │                 │   │
-│  │           ▼                 │   │
-│  │  ┌─────────────────┐        │   │
-│  │  │ PostgreSQL      │        │   │
-│  │  └─────────────────┘        │   │
-│  │                             │   │
-│  └─────────────────────────────┘   │
-└─────────────────────────────────────┘
+declutter/
+├── frontend/                 # React application
+│   ├── src/
+│   │   ├── components/      # Reusable components
+│   │   ├── context/         # React Context providers
+│   │   ├── pages/           # Page components
+│   │   └── utils/           # Utilities (recommendation engine)
+│   └── public/
+│
+├── backend/                  # Node.js API server
+│   ├── server.js            # Express application
+│   ├── emailService.js      # Email functionality
+│   └── init.sql             # Database schema
+│
+├── docker-build/            # Docker build context
+│   ├── Dockerfile
+│   ├── docker-entrypoint.sh
+│   ├── frontend/            # Synced frontend
+│   └── backend/             # Synced backend
+│
+├── docs/                    # Documentation
+│   └── API.md               # API reference
+│
+└── docker-compose.yml       # Development compose file
 ```
 
-**Security:**
-- Only port 3000 exposed to host
-- Backend and database internal only
-- Proper network isolation
-
 ---
 
-## ✨ Features
+## 🔒 Security
 
-### User Features
-- 🔐 **Secure Authentication** - JWT-based user management with password reset
-- 👤 **Personality Profiles** - Customized recommendations based on your decluttering style
-- 📸 **Image Upload** - Photo documentation with AI-powered analysis
-- 🤖 **Smart Recommendations** - AI-powered decisions (keep, sell, donate, discard)
-- ✅ **Decision Recording** - Track what you actually did with each item
-- 👨‍👩‍👧‍👦 **Household Members** - Attribute items to family members
-- 📊 **Progress Dashboard** - Track your decluttering journey
-- 🌙 **Dark Mode** - Light and dark theme support
+**Production Checklist:**
 
-### Admin Features
-- 👥 **User Management** - Approve, manage, and monitor users
-- 📧 **Email Templates** - Customizable email communications
-- 📢 **Announcements** - Send updates to all users
-- 🏷️ **Category Management** - Create and organize item categories
-- ⚙️ **Recommendation Tuning** - Adjust AI recommendation weights and strategies
-- 🧪 **A/B Testing** - Test different recommendation strategies
-- 📈 **Analytics Dashboard** - Track item trends, user activity, and conversion rates
-- 💰 **API Usage Monitoring** - Monitor AI API costs
-
-### Technical Features
-- 💾 **Data Persistence** - PostgreSQL database with full backups
-- 🌐 **Reverse Proxy Ready** - Production deployment support
-- 🔒 **Single Port** - Simplified firewall rules
-- 🐳 **Docker Deployment** - Easy containerized deployment
-
----
-
-## 🛠️ Tech Stack
-
-**Frontend:**
-- React 18 with hooks
-- React Router v6
-- Context API for state management
-- Custom CSS with CSS variables
-- Responsive design
-
-**Backend:**
-- Node.js + Express.js
-- PostgreSQL with node-postgres
-- JWT Authentication
-- Multer (file uploads)
-- Anthropic Claude API (AI features)
-- Nodemailer (email)
-
-**Infrastructure:**
-- Docker & Docker Compose
-- Nginx reverse proxy
-- Multi-stage builds
-- GitHub Actions CI/CD
-
-## 📖 Developer Documentation
-
-| Document | Description |
-|----------|-------------|
-| [docs/API.md](docs/API.md) | Complete REST API documentation |
-| [backend/init.sql](backend/init.sql) | Database schema with comments |
-| [backend/server.js](backend/server.js) | Backend API server (documented) |
-| [frontend/src/](frontend/src/) | React components and utilities |
-
----
-
-## 🔒 Security Notes
-
-**Before production deployment:**
-
-1. ✅ Change `JWT_SECRET` to a strong random value
-2. ✅ Change database password
-3. ✅ Use HTTPS (via reverse proxy)
-4. ✅ Enable firewall rules
-5. ✅ Regular backups
-
----
-
-## 📝 License
-
-MIT License - see [LICENSE](LICENSE) file
+- [ ] Change `JWT_SECRET` to a cryptographically secure value
+- [ ] Change database password from default
+- [ ] Use HTTPS via reverse proxy (Nginx, Traefik, Caddy)
+- [ ] Configure firewall to only expose port 3000/443
+- [ ] Set up automated backups for PostgreSQL
+- [ ] Review and restrict CORS settings if needed
 
 ---
 
 ## 🆘 Troubleshooting
 
-### Docker Not Running
-- macOS: Open Docker Desktop from Applications
-- Windows: Open Docker Desktop
-- Linux: `sudo systemctl start docker`
-
-### Can't Login to Docker Hub
+### Container won't start
 ```bash
-docker login
-docker info | grep Username  # Verify login
+docker-compose logs -f app  # Check application logs
+docker-compose logs -f db   # Check database logs
 ```
 
-### Build Fails
+### Database connection errors
 ```bash
-docker system prune -a  # Clean up
-./build-and-push-macos.sh  # Try again
+# Ensure database is ready before app starts
+docker-compose down -v  # Remove volumes
+docker-compose up -d    # Fresh start
 ```
 
-### Port Already in Use
+### Port already in use
 ```bash
-# Find what's using port 3000
-lsof -i :3000  # macOS/Linux
+# Find process using port 3000
+lsof -i :3000           # macOS/Linux
 netstat -ano | findstr :3000  # Windows
 
-# Change port in docker-compose.yml
+# Or change port in docker-compose.yml
+ports:
+  - "8080:80"  # Use port 8080 instead
 ```
 
----
-
-## 📚 Documentation Index
-
-| Guide | Description | Platform |
-|-------|-------------|----------|
-| [MACOS-BUILD-GUIDE.md](MACOS-BUILD-GUIDE.md) | Complete macOS build instructions | macOS |
-| [WINDOWS-BUILD-GUIDE.md](WINDOWS-BUILD-GUIDE.md) | Complete Windows build instructions | Windows |
-| [BUILD-IMAGE-FIRST.md](BUILD-IMAGE-FIRST.md) | Linux/general build guide | Linux/All |
-| [QUICKSTART.md](QUICKSTART.md) | Quick 5-minute setup | All |
-| [DEPLOY-PREBUILT.md](DEPLOY-PREBUILT.md) | Zero-setup deployment | All |
-| [REVERSE-PROXY-SETUP.md](REVERSE-PROXY-SETUP.md) | Synology & reverse proxy | All |
-| [GITHUB-SETUP.md](GITHUB-SETUP.md) | GitHub Actions automation | All |
-| [DOCKER-BUILD.md](DOCKER-BUILD.md) | Docker image details | All |
-
----
-
-## 🎉 Quick Start Commands
-
+### Reset admin password
 ```bash
-# Build the image (macOS)
-./build-and-push-macos.sh
-
-# Build the image (Windows)
-.\build-and-push.ps1
-
-# Deploy locally
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop
-docker-compose down
-
-# Update
-docker-compose pull && docker-compose up -d
+docker exec declutter_db psql -U declutter_user -d declutter_db -c "
+  UPDATE users SET password_hash = '\$2b\$10\$...' WHERE email = 'admin@example.com';
+"
 ```
+
+---
+
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+---
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ---
 
 ## 📧 Support
 
-- **Issues**: Create issue on GitHub
-- **Documentation**: See guides in this package
-- **Updates**: Check Docker Hub for new versions
+- **Issues**: [GitHub Issues](https://github.com/thunderdanp/declutter/issues)
+- **Docker Hub**: [thunderdanp/declutter](https://hub.docker.com/r/thunderdanp/declutter)
 
 ---
 
-**Made with ❤️ for organized homes**
+<p align="center">Made with ❤️ for organized homes</p>
