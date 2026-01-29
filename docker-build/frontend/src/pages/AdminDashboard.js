@@ -57,6 +57,7 @@ function AdminDashboard({ setIsAuthenticated }) {
           <Link to="/admin/users" className="nav-link">Users</Link>
           <Link to="/admin/categories" className="nav-link">Categories</Link>
           <Link to="/admin/api-usage" className="nav-link">API Usage</Link>
+          <Link to="/admin/recommendations" className="nav-link">Recommendations</Link>
           <Link to="/admin/email-templates" className="nav-link">Email Templates</Link>
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>
@@ -155,6 +156,12 @@ function AdminDashboard({ setIsAuthenticated }) {
                 <div className="action-icon">📢</div>
                 <h3>Announcements</h3>
                 <p>Send announcements to all users</p>
+              </Link>
+
+              <Link to="/admin/recommendations" className="admin-action-card">
+                <div className="action-icon">🎯</div>
+                <h3>Recommendations</h3>
+                <p>Tune scoring weights and A/B test strategies</p>
               </Link>
 
               <Link to="/admin/settings" className="admin-action-card">

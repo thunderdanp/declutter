@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { analyzeItem, generateReasoning, recommendationLabels } from '../utils/recommendationEngine';
+import { analyzeItem, generateReasoning, recommendationLabels, fetchRecommendationSettings } from '../utils/recommendationEngine';
 import { useTheme } from '../context/ThemeContext';
 import CategorySelect from '../components/CategorySelect';
 import './EvaluateItem.css';
@@ -8,6 +8,7 @@ import './EvaluateItem.css';
 function EvaluateItem({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [profile, setProfile] = useState(null);
+  const [recSettings, setRecSettings] = useState(null);
   const [householdMembers, setHouseholdMembers] = useState([]);
   const [selectedOwners, setSelectedOwners] = useState([]);
   const [formData, setFormData] = useState({
@@ -41,7 +42,15 @@ function EvaluateItem({ setIsAuthenticated }) {
   useEffect(() => {
     fetchProfile();
     fetchHouseholdMembers();
+    loadRecommendationSettings();
   }, []);
+
+  const loadRecommendationSettings = async () => {
+    const settings = await fetchRecommendationSettings();
+    if (settings) {
+      setRecSettings(settings);
+    }
+  };
 
   const fetchHouseholdMembers = async () => {
     try {
@@ -227,7 +236,7 @@ function EvaluateItem({ setIsAuthenticated }) {
 
     setLoading(true);
 
-    const recommendationType = analyzeItem(formData, profile);
+    const recommendationType = analyzeItem(formData, profile, recSettings);
     const reasoning = generateReasoning(recommendationType, formData, profile);
 
     try {

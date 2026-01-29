@@ -22,6 +22,40 @@ CREATE TABLE IF NOT EXISTS system_settings (
 INSERT INTO system_settings (setting_key, setting_value) VALUES ('registration_mode', 'automatic')
 ON CONFLICT (setting_key) DO NOTHING;
 
+-- Recommendation engine settings
+INSERT INTO system_settings (setting_key, setting_value) VALUES
+('recommendation_weights', '{
+  "usage": {"yes": {"keep": 3, "accessible": 2}, "rarely": {"storage": 2, "accessible": 1}, "no": {"donate": 2, "sell": 1, "discard": 1}},
+  "sentimental": {"high": {"keep": 3, "storage": 2}, "some": {"keep": 1, "storage": 2}, "none": {"sell": 1, "donate": 1}},
+  "condition": {"excellent": {"keep": 1, "sell": 2, "donate": 1}, "good": {"keep": 1, "sell": 2, "donate": 1}, "fair": {"donate": 2, "discard": 1}, "poor": {"discard": 3}},
+  "value": {"high": {"keep": 2, "sell": 3}, "medium": {"sell": 2, "donate": 1}, "low": {"donate": 2, "discard": 1}},
+  "replaceability": {"difficult": {"keep": 2, "storage": 2}, "moderate": {"storage": 1}, "easy": {"donate": 1, "discard": 1}},
+  "space": {"yes": {"keep": 2, "accessible": 3}, "limited": {"storage": 2}, "no": {"storage": 1, "sell": 1, "donate": 1}}
+}')
+ON CONFLICT (setting_key) DO NOTHING;
+
+INSERT INTO system_settings (setting_key, setting_value) VALUES
+('recommendation_thresholds', '{
+  "minimumScoreDifference": 2,
+  "tieBreakOrder": ["keep", "accessible", "storage", "sell", "donate", "discard"]
+}')
+ON CONFLICT (setting_key) DO NOTHING;
+
+INSERT INTO system_settings (setting_key, setting_value) VALUES
+('recommendation_strategies', '{
+  "active": "balanced",
+  "abTestEnabled": false,
+  "abTestPercentage": 50,
+  "strategies": {
+    "balanced": {"name": "Balanced", "description": "Equal consideration of all factors", "multipliers": {"usage": 1, "sentimental": 1, "condition": 1, "value": 1, "replaceability": 1, "space": 1}},
+    "minimalist": {"name": "Minimalist", "description": "Favors letting go of items", "multipliers": {"usage": 1.5, "sentimental": 0.5, "condition": 1, "value": 0.8, "replaceability": 0.7, "space": 1.5}},
+    "sentimental": {"name": "Sentimental", "description": "Prioritizes emotional attachment", "multipliers": {"usage": 0.8, "sentimental": 2, "condition": 0.8, "value": 0.5, "replaceability": 1.5, "space": 0.7}},
+    "practical": {"name": "Practical", "description": "Focuses on usage and condition", "multipliers": {"usage": 2, "sentimental": 0.5, "condition": 1.5, "value": 1, "replaceability": 1, "space": 1.2}},
+    "financial": {"name": "Financial", "description": "Maximizes monetary value recovery", "multipliers": {"usage": 0.8, "sentimental": 0.5, "condition": 1.5, "value": 2, "replaceability": 0.8, "space": 0.8}}
+  }
+}')
+ON CONFLICT (setting_key) DO NOTHING;
+
 -- Personality profiles table
 CREATE TABLE IF NOT EXISTS personality_profiles (
     id SERIAL PRIMARY KEY,

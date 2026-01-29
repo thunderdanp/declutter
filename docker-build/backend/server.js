@@ -1903,6 +1903,199 @@ app.delete('/api/household-members/:id', authenticateToken, async (req, res) => 
   }
 });
 
+// ============= RECOMMENDATION SETTINGS ROUTES =============
+
+// Get recommendation settings (admin)
+app.get('/api/admin/recommendations', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recommendation_weights', 'recommendation_thresholds', 'recommendation_strategies')"
+    );
+
+    const settings = {};
+    result.rows.forEach(row => {
+      try {
+        settings[row.setting_key] = JSON.parse(row.setting_value);
+      } catch (e) {
+        settings[row.setting_key] = row.setting_value;
+      }
+    });
+
+    res.json(settings);
+  } catch (error) {
+    console.error('Get recommendation settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update recommendation weights (admin)
+app.put('/api/admin/recommendations/weights', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { weights } = req.body;
+
+    if (!weights || typeof weights !== 'object') {
+      return res.status(400).json({ error: 'Invalid weights data' });
+    }
+
+    await pool.query(
+      `INSERT INTO system_settings (setting_key, setting_value)
+       VALUES ('recommendation_weights', $1)
+       ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify(weights)]
+    );
+
+    res.json({ message: 'Weights updated successfully' });
+  } catch (error) {
+    console.error('Update recommendation weights error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update recommendation thresholds (admin)
+app.put('/api/admin/recommendations/thresholds', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { thresholds } = req.body;
+
+    if (!thresholds || typeof thresholds !== 'object') {
+      return res.status(400).json({ error: 'Invalid thresholds data' });
+    }
+
+    await pool.query(
+      `INSERT INTO system_settings (setting_key, setting_value)
+       VALUES ('recommendation_thresholds', $1)
+       ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify(thresholds)]
+    );
+
+    res.json({ message: 'Thresholds updated successfully' });
+  } catch (error) {
+    console.error('Update recommendation thresholds error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update recommendation strategies (admin)
+app.put('/api/admin/recommendations/strategies', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { strategies } = req.body;
+
+    if (!strategies || typeof strategies !== 'object') {
+      return res.status(400).json({ error: 'Invalid strategies data' });
+    }
+
+    await pool.query(
+      `INSERT INTO system_settings (setting_key, setting_value)
+       VALUES ('recommendation_strategies', $1)
+       ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP`,
+      [JSON.stringify(strategies)]
+    );
+
+    res.json({ message: 'Strategies updated successfully' });
+  } catch (error) {
+    console.error('Update recommendation strategies error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get recommendation settings (for frontend - public for authenticated users)
+app.get('/api/recommendations/settings', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recommendation_weights', 'recommendation_thresholds', 'recommendation_strategies')"
+    );
+
+    const settings = {};
+    result.rows.forEach(row => {
+      try {
+        settings[row.setting_key] = JSON.parse(row.setting_value);
+      } catch (e) {
+        settings[row.setting_key] = row.setting_value;
+      }
+    });
+
+    // Determine which strategy to use (for A/B testing)
+    const strategies = settings.recommendation_strategies || {};
+    let activeStrategy = strategies.active || 'balanced';
+
+    if (strategies.abTestEnabled && strategies.abTestPercentage) {
+      // Use user ID to consistently assign them to a test group
+      const userIdHash = req.user.userId % 100;
+      if (userIdHash >= strategies.abTestPercentage) {
+        // User is in the B group - use the alternate strategy
+        activeStrategy = strategies.abTestAlternate || activeStrategy;
+      }
+    }
+
+    res.json({
+      weights: settings.recommendation_weights,
+      thresholds: settings.recommendation_thresholds,
+      activeStrategy,
+      strategyConfig: strategies.strategies?.[activeStrategy] || null
+    });
+  } catch (error) {
+    console.error('Get recommendation settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset recommendation settings to defaults (admin)
+app.post('/api/admin/recommendations/reset', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { settingType } = req.body;
+
+    const defaults = {
+      recommendation_weights: {
+        usage: { yes: { keep: 3, accessible: 2 }, rarely: { storage: 2, accessible: 1 }, no: { donate: 2, sell: 1, discard: 1 } },
+        sentimental: { high: { keep: 3, storage: 2 }, some: { keep: 1, storage: 2 }, none: { sell: 1, donate: 1 } },
+        condition: { excellent: { keep: 1, sell: 2, donate: 1 }, good: { keep: 1, sell: 2, donate: 1 }, fair: { donate: 2, discard: 1 }, poor: { discard: 3 } },
+        value: { high: { keep: 2, sell: 3 }, medium: { sell: 2, donate: 1 }, low: { donate: 2, discard: 1 } },
+        replaceability: { difficult: { keep: 2, storage: 2 }, moderate: { storage: 1 }, easy: { donate: 1, discard: 1 } },
+        space: { yes: { keep: 2, accessible: 3 }, limited: { storage: 2 }, no: { storage: 1, sell: 1, donate: 1 } }
+      },
+      recommendation_thresholds: {
+        minimumScoreDifference: 2,
+        tieBreakOrder: ['keep', 'accessible', 'storage', 'sell', 'donate', 'discard']
+      },
+      recommendation_strategies: {
+        active: 'balanced',
+        abTestEnabled: false,
+        abTestPercentage: 50,
+        strategies: {
+          balanced: { name: 'Balanced', description: 'Equal consideration of all factors', multipliers: { usage: 1, sentimental: 1, condition: 1, value: 1, replaceability: 1, space: 1 } },
+          minimalist: { name: 'Minimalist', description: 'Favors letting go of items', multipliers: { usage: 1.5, sentimental: 0.5, condition: 1, value: 0.8, replaceability: 0.7, space: 1.5 } },
+          sentimental: { name: 'Sentimental', description: 'Prioritizes emotional attachment', multipliers: { usage: 0.8, sentimental: 2, condition: 0.8, value: 0.5, replaceability: 1.5, space: 0.7 } },
+          practical: { name: 'Practical', description: 'Focuses on usage and condition', multipliers: { usage: 2, sentimental: 0.5, condition: 1.5, value: 1, replaceability: 1, space: 1.2 } },
+          financial: { name: 'Financial', description: 'Maximizes monetary value recovery', multipliers: { usage: 0.8, sentimental: 0.5, condition: 1.5, value: 2, replaceability: 0.8, space: 0.8 } }
+        }
+      }
+    };
+
+    if (settingType && defaults[settingType]) {
+      await pool.query(
+        `INSERT INTO system_settings (setting_key, setting_value)
+         VALUES ($1, $2)
+         ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP`,
+        [settingType, JSON.stringify(defaults[settingType])]
+      );
+    } else {
+      // Reset all
+      for (const [key, value] of Object.entries(defaults)) {
+        await pool.query(
+          `INSERT INTO system_settings (setting_key, setting_value)
+           VALUES ($1, $2)
+           ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP`,
+          [key, JSON.stringify(value)]
+        );
+      }
+    }
+
+    res.json({ message: 'Settings reset to defaults' });
+  } catch (error) {
+    console.error('Reset recommendation settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

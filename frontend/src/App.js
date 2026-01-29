@@ -20,6 +20,7 @@ import AdminEmailTemplates from './pages/AdminEmailTemplates';
 import AdminAnnouncements from './pages/AdminAnnouncements';
 import AdminCategories from './pages/AdminCategories';
 import AdminApiUsage from './pages/AdminApiUsage';
+import AdminRecommendations from './pages/AdminRecommendations';
 import HouseholdMembers from './pages/HouseholdMembers';
 import './App.css';
 
@@ -134,6 +135,9 @@ function App() {
         } />
         <Route path="/admin/api-usage" element={
           isAuthenticated ? <AdminApiUsage setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/recommendations" element={
+          isAuthenticated ? <AdminRecommendations setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
           </Routes>
