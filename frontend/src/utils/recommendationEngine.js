@@ -1,7 +1,37 @@
 /**
- * Recommendation Engine
- * Shared utility for analyzing items and generating recommendations
- * Supports configurable weights, thresholds, and A/B testing strategies
+ * ============================================================================
+ * RECOMMENDATION ENGINE
+ * ============================================================================
+ *
+ * Shared utility for analyzing items and generating declutter recommendations.
+ * This engine evaluates items based on multiple factors and user preferences
+ * to provide personalized recommendations.
+ *
+ * ## Features
+ * - Configurable scoring weights for each evaluation factor
+ * - Support for multiple recommendation strategies (balanced, minimalist, etc.)
+ * - A/B testing support for comparing different strategies
+ * - User personality profile integration
+ * - Detailed score breakdown for transparency
+ *
+ * ## Recommendation Types
+ * - keep: Item should be kept in the home
+ * - accessible: Keep in an easily accessible location
+ * - storage: Move to long-term storage
+ * - sell: Sell for monetary value
+ * - donate: Give to charity/others
+ * - discard: Throw away/recycle
+ *
+ * ## Usage
+ * ```javascript
+ * import { analyzeItem, generateReasoning, recommendationLabels } from './recommendationEngine';
+ *
+ * const recommendation = analyzeItem(formData, userProfile, settings);
+ * const reasoning = generateReasoning(recommendation, formData, userProfile);
+ * ```
+ *
+ * @module recommendationEngine
+ * ============================================================================
  */
 
 // Default weights used when no settings are provided

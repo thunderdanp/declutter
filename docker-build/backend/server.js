@@ -1,3 +1,50 @@
+/**
+ * ============================================================================
+ * DECLUTTER ASSISTANT - BACKEND API SERVER
+ * ============================================================================
+ *
+ * Main Express.js server providing RESTful API endpoints for the Declutter
+ * Assistant application.
+ *
+ * @author Declutter Team
+ * @version 1.2.0
+ *
+ * ## Architecture
+ * - Express.js REST API
+ * - PostgreSQL database via node-postgres (pg)
+ * - JWT authentication
+ * - Multer for file uploads
+ * - Anthropic Claude API for AI features
+ *
+ * ## API Sections
+ * - Authentication: /api/auth/* - Login, register, password reset
+ * - Profile: /api/profile - User personality profiles
+ * - Items: /api/items/* - Item CRUD and decision recording
+ * - Categories: /api/categories - Item categorization
+ * - Household: /api/household-members - Family member tracking
+ * - Admin: /api/admin/* - Admin-only endpoints
+ *   - Users management
+ *   - System settings
+ *   - Email templates
+ *   - Announcements
+ *   - Categories management
+ *   - Recommendation engine tuning
+ *   - Analytics dashboard
+ *   - API usage monitoring
+ *
+ * ## Environment Variables
+ * - PORT: Server port (default: 3001)
+ * - DATABASE_URL: PostgreSQL connection string
+ * - JWT_SECRET: Secret for JWT token signing
+ * - ANTHROPIC_API_KEY: API key for Claude AI
+ * - SMTP_* : Email configuration
+ *
+ * ## Documentation
+ * See /docs/API.md for complete API documentation
+ *
+ * ============================================================================
+ */
+
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');

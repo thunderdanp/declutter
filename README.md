@@ -247,36 +247,65 @@ ports:
 
 ## ✨ Features
 
-- 🔐 **Secure Authentication** - JWT-based user management
-- 👤 **Personality Profiles** - Customized recommendations
-- 📸 **Image Upload** - Photo documentation
-- 🤖 **Smart Recommendations** - AI-powered decisions
-- 📊 **Progress Dashboard** - Track your decluttering
-- 💾 **Data Persistence** - All data saved securely
+### User Features
+- 🔐 **Secure Authentication** - JWT-based user management with password reset
+- 👤 **Personality Profiles** - Customized recommendations based on your decluttering style
+- 📸 **Image Upload** - Photo documentation with AI-powered analysis
+- 🤖 **Smart Recommendations** - AI-powered decisions (keep, sell, donate, discard)
+- ✅ **Decision Recording** - Track what you actually did with each item
+- 👨‍👩‍👧‍👦 **Household Members** - Attribute items to family members
+- 📊 **Progress Dashboard** - Track your decluttering journey
+- 🌙 **Dark Mode** - Light and dark theme support
+
+### Admin Features
+- 👥 **User Management** - Approve, manage, and monitor users
+- 📧 **Email Templates** - Customizable email communications
+- 📢 **Announcements** - Send updates to all users
+- 🏷️ **Category Management** - Create and organize item categories
+- ⚙️ **Recommendation Tuning** - Adjust AI recommendation weights and strategies
+- 🧪 **A/B Testing** - Test different recommendation strategies
+- 📈 **Analytics Dashboard** - Track item trends, user activity, and conversion rates
+- 💰 **API Usage Monitoring** - Monitor AI API costs
+
+### Technical Features
+- 💾 **Data Persistence** - PostgreSQL database with full backups
 - 🌐 **Reverse Proxy Ready** - Production deployment support
 - 🔒 **Single Port** - Simplified firewall rules
+- 🐳 **Docker Deployment** - Easy containerized deployment
 
 ---
 
 ## 🛠️ Tech Stack
 
 **Frontend:**
-- React 18
-- React Router
-- Axios
-- Custom CSS
+- React 18 with hooks
+- React Router v6
+- Context API for state management
+- Custom CSS with CSS variables
+- Responsive design
 
 **Backend:**
-- Node.js + Express
-- PostgreSQL
+- Node.js + Express.js
+- PostgreSQL with node-postgres
 - JWT Authentication
 - Multer (file uploads)
+- Anthropic Claude API (AI features)
+- Nodemailer (email)
 
 **Infrastructure:**
 - Docker & Docker Compose
-- Nginx
+- Nginx reverse proxy
 - Multi-stage builds
 - GitHub Actions CI/CD
+
+## 📖 Developer Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/API.md](docs/API.md) | Complete REST API documentation |
+| [backend/init.sql](backend/init.sql) | Database schema with comments |
+| [backend/server.js](backend/server.js) | Backend API server (documented) |
+| [frontend/src/](frontend/src/) | React components and utilities |
 
 ---
 

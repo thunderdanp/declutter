@@ -1,4 +1,40 @@
--- Users table
+-- ============================================================================
+-- DECLUTTER ASSISTANT - DATABASE SCHEMA
+-- ============================================================================
+-- This file contains the complete database schema for the Declutter Assistant
+-- application. It creates all necessary tables, indexes, triggers, and seed data.
+--
+-- Tables:
+--   - users: User accounts and authentication
+--   - system_settings: Application-wide configuration
+--   - personality_profiles: User decluttering personality preferences
+--   - items: Items being evaluated for decluttering
+--   - email_templates: Customizable email templates
+--   - announcements: Admin announcements to users
+--   - notification_preferences: User notification settings
+--   - household_members: Family/household member tracking
+--   - item_members: Links items to household members (ownership)
+--   - categories: Item categorization
+--   - api_usage_logs: AI API usage tracking and cost monitoring
+--
+-- ============================================================================
+
+-- ============================================================================
+-- USERS TABLE
+-- ============================================================================
+-- Stores user account information including authentication credentials,
+-- profile data, and admin status.
+--
+-- Columns:
+--   id: Primary key
+--   email: Unique email address for login
+--   password_hash: bcrypt hashed password
+--   first_name, last_name: User's name
+--   is_admin: Whether user has admin privileges
+--   is_approved: Whether user can access the app (for approval-based registration)
+--   anthropic_api_key: User's own API key for AI features (optional)
+--   image_analysis_enabled: Whether AI image analysis is enabled for this user
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
@@ -13,18 +49,48 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- System settings table
+-- ============================================================================
+-- SYSTEM SETTINGS TABLE
+-- ============================================================================
+-- Key-value store for application-wide settings. Values are stored as JSON
+-- strings to support complex configuration objects.
+--
+-- Current settings:
+--   - registration_mode: 'automatic' or 'approval' (admin must approve new users)
+--   - recommendation_weights: Scoring weights for the recommendation engine
+--   - recommendation_thresholds: Decision thresholds and tie-break rules
+--   - recommendation_strategies: A/B testing and strategy configurations
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS system_settings (
     setting_key VARCHAR(100) PRIMARY KEY,
     setting_value TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Insert default settings
+-- Default registration mode
 INSERT INTO system_settings (setting_key, setting_value) VALUES ('registration_mode', 'automatic')
 ON CONFLICT (setting_key) DO NOTHING;
 
--- Recommendation engine settings
+-- ============================================================================
+-- RECOMMENDATION ENGINE SETTINGS
+-- ============================================================================
+-- These settings control how the recommendation engine scores items.
+--
+-- Weights: Maps user answers to recommendation scores
+--   - Each answer (yes/no/rarely, high/medium/low, etc.) adds points to
+--     different recommendation types (keep, sell, donate, discard, etc.)
+--
+-- Thresholds: Controls decision-making
+--   - minimumScoreDifference: How much higher the top score must be
+--   - tieBreakOrder: Order of preference when scores are tied
+--
+-- Strategies: Different recommendation approaches
+--   - balanced: Equal weight to all factors
+--   - minimalist: Favors letting go of items
+--   - sentimental: Prioritizes emotional attachment
+--   - practical: Focuses on usage and condition
+--   - financial: Maximizes monetary value recovery
+-- ============================================================================
 INSERT INTO system_settings (setting_key, setting_value) VALUES
 ('recommendation_weights', '{
   "usage": {"yes": {"keep": 3, "accessible": 2}, "rarely": {"storage": 2, "accessible": 1}, "no": {"donate": 2, "sell": 1, "discard": 1}},
@@ -58,7 +124,13 @@ INSERT INTO system_settings (setting_key, setting_value) VALUES
 }')
 ON CONFLICT (setting_key) DO NOTHING;
 
--- Personality profiles table
+-- ============================================================================
+-- PERSONALITY PROFILES TABLE
+-- ============================================================================
+-- Stores user personality profiles that influence recommendations.
+-- The profile_data JSONB column contains answers to personality questions
+-- about attachment style, decision-making preferences, and decluttering goals.
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS personality_profiles (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -68,7 +140,26 @@ CREATE TABLE IF NOT EXISTS personality_profiles (
     UNIQUE(user_id)
 );
 
--- Items table
+-- ============================================================================
+-- ITEMS TABLE
+-- ============================================================================
+-- Core table storing items being evaluated for decluttering decisions.
+--
+-- Columns:
+--   id: Primary key
+--   user_id: Owner of the item (foreign key to users)
+--   name: Item name/title
+--   description: Optional detailed description
+--   location: Where the item is stored (bedroom, garage, etc.)
+--   category: Item category (clothing, electronics, etc.)
+--   image_url: Path to uploaded item photo
+--   recommendation: AI-generated recommendation (keep/sell/donate/discard/etc.)
+--   original_recommendation: Original AI recommendation (before admin changes)
+--   recommendation_reasoning: AI explanation for the recommendation
+--   decision: User's final decision (what they actually did with the item)
+--   answers: JSONB storing user's answers to evaluation questions
+--   status: Item status (pending, completed, etc.)
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS items (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -87,7 +178,21 @@ CREATE TABLE IF NOT EXISTS items (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Email templates table
+-- ============================================================================
+-- EMAIL TEMPLATES TABLE
+-- ============================================================================
+-- Customizable email templates for system communications.
+-- Supports variable substitution using {{variableName}} syntax.
+--
+-- Columns:
+--   name: Unique template identifier
+--   subject: Email subject line (supports variables)
+--   body: Email body content (supports variables)
+--   description: Admin-facing description of template purpose
+--   is_system: Whether template is system-managed (cannot be deleted)
+--   trigger_event: Event that triggers this email (user_registration, etc.)
+--   is_enabled: Whether emails using this template should be sent
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS email_templates (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) UNIQUE NOT NULL,
@@ -101,7 +206,18 @@ CREATE TABLE IF NOT EXISTS email_templates (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Announcements table
+-- ============================================================================
+-- ANNOUNCEMENTS TABLE
+-- ============================================================================
+-- Admin announcements that can be sent to all users via email.
+--
+-- Columns:
+--   title: Announcement headline
+--   content: Full announcement text
+--   created_by: Admin who created the announcement
+--   sent_at: When the announcement was emailed (null if not yet sent)
+--   recipient_count: Number of users who received the email
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS announcements (
     id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -113,7 +229,11 @@ CREATE TABLE IF NOT EXISTS announcements (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Notification preferences table
+-- ============================================================================
+-- NOTIFICATION PREFERENCES TABLE
+-- ============================================================================
+-- Per-user notification settings controlling what emails they receive.
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS notification_preferences (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -126,7 +246,16 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
     UNIQUE(user_id)
 );
 
--- Insert default email templates
+-- ============================================================================
+-- DEFAULT EMAIL TEMPLATES
+-- ============================================================================
+-- System email templates with variable placeholders:
+--   {{firstName}} - User's first name
+--   {{lastName}} - User's last name
+--   {{resetLink}} - Password reset URL
+--   {{title}} - Announcement title
+--   {{content}} - Announcement content
+-- ============================================================================
 INSERT INTO email_templates (name, subject, body, description, is_system) VALUES
 ('welcome', 'Welcome to Declutter Assistant!', 'Hello {{firstName}},
 
@@ -161,7 +290,12 @@ Best regards,
 The Declutter Team', 'Template for admin announcements', true)
 ON CONFLICT (name) DO NOTHING;
 
--- Household members table
+-- ============================================================================
+-- HOUSEHOLD MEMBERS TABLE
+-- ============================================================================
+-- Tracks household/family members for item ownership attribution.
+-- Items can be associated with one or more household members.
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS household_members (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -171,7 +305,12 @@ CREATE TABLE IF NOT EXISTS household_members (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Item household members junction table
+-- ============================================================================
+-- ITEM MEMBERS JUNCTION TABLE
+-- ============================================================================
+-- Many-to-many relationship between items and household members.
+-- Allows tracking which household members own/use each item.
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS item_members (
     id SERIAL PRIMARY KEY,
     item_id INTEGER REFERENCES items(id) ON DELETE CASCADE,
@@ -180,7 +319,21 @@ CREATE TABLE IF NOT EXISTS item_members (
     UNIQUE(item_id, member_id)
 );
 
--- Categories table
+-- ============================================================================
+-- CATEGORIES TABLE
+-- ============================================================================
+-- Item categories for organizing and filtering items.
+-- Categories have display properties (icon, color) and can be customized.
+--
+-- Columns:
+--   name: Internal category name
+--   slug: URL-friendly identifier
+--   display_name: User-facing name
+--   icon: Emoji or icon identifier
+--   color: Hex color code for UI
+--   sort_order: Display order in lists
+--   is_default: Whether this is the fallback category
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) UNIQUE NOT NULL,
@@ -194,7 +347,7 @@ CREATE TABLE IF NOT EXISTS categories (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Seed default categories
+-- Default categories
 INSERT INTO categories (name, slug, display_name, icon, color, sort_order, is_default) VALUES
 ('Clothing', 'clothing', 'Clothing', '👕', '#9C27B0', 1, false),
 ('Books', 'books', 'Books', '📚', '#795548', 2, false),
@@ -207,7 +360,22 @@ INSERT INTO categories (name, slug, display_name, icon, color, sort_order, is_de
 ('Other', 'other', 'Other', '📦', '#78909C', 99, true)
 ON CONFLICT (slug) DO NOTHING;
 
--- API usage logs table
+-- ============================================================================
+-- API USAGE LOGS TABLE
+-- ============================================================================
+-- Tracks usage of AI APIs (Anthropic Claude) for cost monitoring and analytics.
+--
+-- Columns:
+--   user_id: User who made the API call
+--   endpoint: API endpoint called (e.g., 'image_analysis')
+--   model: AI model used (e.g., 'claude-3-sonnet')
+--   input_tokens: Number of input tokens consumed
+--   output_tokens: Number of output tokens generated
+--   estimated_cost: Calculated cost in USD
+--   success: Whether the API call succeeded
+--   error_message: Error details if call failed
+--   used_user_key: Whether user's own API key was used
+-- ============================================================================
 CREATE TABLE IF NOT EXISTS api_usage_logs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -222,12 +390,18 @@ CREATE TABLE IF NOT EXISTS api_usage_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create indexes for better query performance
+-- ============================================================================
+-- INDEXES
+-- ============================================================================
+-- Performance indexes for common query patterns
+-- ============================================================================
 CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
 CREATE INDEX IF NOT EXISTS idx_categories_sort_order ON categories(sort_order);
 CREATE INDEX idx_items_user_id ON items(user_id);
 CREATE INDEX idx_items_status ON items(status);
 CREATE INDEX idx_items_recommendation ON items(recommendation);
+CREATE INDEX IF NOT EXISTS idx_items_decision ON items(decision);
+CREATE INDEX IF NOT EXISTS idx_items_created_at ON items(created_at);
 CREATE INDEX IF NOT EXISTS idx_household_members_user_id ON household_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_item_members_item_id ON item_members(item_id);
 CREATE INDEX IF NOT EXISTS idx_item_members_member_id ON item_members(member_id);
@@ -237,7 +411,11 @@ CREATE INDEX idx_notification_preferences_user_id ON notification_preferences(us
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_user_id ON api_usage_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_created_at ON api_usage_logs(created_at);
 
--- Function to update updated_at timestamp
+-- ============================================================================
+-- TRIGGER FUNCTION
+-- ============================================================================
+-- Automatically updates the updated_at timestamp when a row is modified
+-- ============================================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -246,7 +424,11 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Triggers for updated_at
+-- ============================================================================
+-- TRIGGERS
+-- ============================================================================
+-- Apply updated_at trigger to all tables with timestamps
+-- ============================================================================
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
