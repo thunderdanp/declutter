@@ -54,6 +54,20 @@ function App() {
     }
   }, []);
 
+  // Handle scroll to shrink header on mobile
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 50) {
+        document.body.classList.add('scrolled');
+      } else {
+        document.body.classList.remove('scrolled');
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   if (loading) {
     return (
       <div className="loading-screen">

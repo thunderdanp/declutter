@@ -95,7 +95,7 @@
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1.5rem;
   margin-bottom: 3rem;
-  animation: fadeInUp 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) 0.1s both;
+  animation: fadeInUp 0.6s ease-out;
 }
 
 .stat-card {
@@ -148,7 +148,7 @@
 .stat-discard .stat-number { color: var(--discard); }
 
 .quick-actions {
-  animation: fadeInUp 0.6s cubic-bezier(0.25, 0.1, 0.25, 1) 0.2s both;
+  animation: fadeInUp 0.6s ease-out 0.2s both;
 }
 
 .section-title {

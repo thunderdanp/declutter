@@ -71,14 +71,7 @@ function Login({ setIsAuthenticated }) {
             />
           </div>
 
-          {error && (
-            <div className="error-message">
-              {error}
-              <div className="error-help">
-                <Link to="/forgot-password">Reset your password</Link>
-              </div>
-            </div>
-          )}
+          {error && <div className="error-message">{error}</div>}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Signing in...' : 'Sign In'}
@@ -86,7 +79,6 @@ function Login({ setIsAuthenticated }) {
         </form>
 
         <div className="auth-footer">
-          <p><Link to="/forgot-password">Forgot your password?</Link></p>
           <p>Don't have an account? <Link to="/register">Sign up</Link></p>
         </div>
       </div>
