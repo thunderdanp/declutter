@@ -770,6 +770,7 @@ app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) =>
   try {
     const result = await pool.query(`
       SELECT u.id, u.email, u.first_name, u.last_name, u.is_admin, u.is_approved, u.created_at,
+             u.anthropic_api_key IS NOT NULL as has_api_key, u.image_analysis_enabled,
              COUNT(i.id) as item_count
       FROM users u
       LEFT JOIN items i ON u.id = i.user_id
@@ -791,6 +792,53 @@ app.patch('/api/admin/users/:id/approve', authenticateToken, requireAdmin, async
     res.json({ message: 'User approved' });
   } catch (error) {
     console.error('Approve user error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user API settings (admin)
+app.put('/api/admin/users/:id/api-settings', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { anthropic_api_key, image_analysis_enabled, clear_api_key } = req.body;
+
+    const updates = [];
+    const params = [];
+    let paramCount = 1;
+
+    if (clear_api_key) {
+      updates.push(`anthropic_api_key = NULL`);
+    } else if (anthropic_api_key !== undefined && anthropic_api_key !== '') {
+      updates.push(`anthropic_api_key = $${paramCount++}`);
+      params.push(anthropic_api_key);
+    }
+
+    if (image_analysis_enabled !== undefined) {
+      updates.push(`image_analysis_enabled = $${paramCount++}`);
+      params.push(image_analysis_enabled);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No updates provided' });
+    }
+
+    params.push(id);
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, anthropic_api_key, image_analysis_enabled`;
+
+    const result = await pool.query(query, params);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    res.json({
+      id: user.id,
+      hasApiKey: !!user.anthropic_api_key,
+      imageAnalysisEnabled: user.image_analysis_enabled !== false
+    });
+  } catch (error) {
+    console.error('Update user API settings error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

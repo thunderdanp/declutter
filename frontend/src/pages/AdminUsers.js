@@ -6,6 +6,9 @@ function AdminUsers({ setIsAuthenticated }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
+  const [editingApiKey, setEditingApiKey] = useState(null);
+  const [newApiKey, setNewApiKey] = useState('');
+  const [savingApiKey, setSavingApiKey] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -84,6 +87,82 @@ function AdminUsers({ setIsAuthenticated }) {
     localStorage.removeItem('user');
     setIsAuthenticated(false);
     navigate('/');
+  };
+
+  const handleSaveApiKey = async (userId) => {
+    setSavingApiKey(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/users/${userId}/api-settings`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ anthropic_api_key: newApiKey })
+      });
+
+      if (response.ok) {
+        fetchUsers();
+        setEditingApiKey(null);
+        setNewApiKey('');
+      } else {
+        alert('Failed to save API key');
+      }
+    } catch (error) {
+      console.error('Error saving API key:', error);
+      alert('Failed to save API key');
+    } finally {
+      setSavingApiKey(false);
+    }
+  };
+
+  const handleClearApiKey = async (userId) => {
+    if (!window.confirm('Remove API key for this user?')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/users/${userId}/api-settings`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ clear_api_key: true })
+      });
+
+      if (response.ok) {
+        fetchUsers();
+      } else {
+        alert('Failed to remove API key');
+      }
+    } catch (error) {
+      console.error('Error removing API key:', error);
+      alert('Failed to remove API key');
+    }
+  };
+
+  const handleToggleImageAnalysis = async (userId, currentValue) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/users/${userId}/api-settings`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ image_analysis_enabled: !currentValue })
+      });
+
+      if (response.ok) {
+        fetchUsers();
+      } else {
+        alert('Failed to update setting');
+      }
+    } catch (error) {
+      console.error('Error updating setting:', error);
+      alert('Failed to update setting');
+    }
   };
 
   const formatDate = (dateString) => {
@@ -170,6 +249,7 @@ function AdminUsers({ setIsAuthenticated }) {
                   <th>Name</th>
                   <th>Registered</th>
                   <th>Items</th>
+                  <th>API Key</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
@@ -181,6 +261,56 @@ function AdminUsers({ setIsAuthenticated }) {
                     <td>{user.first_name} {user.last_name}</td>
                     <td>{formatDate(user.created_at)}</td>
                     <td>{user.item_count || 0}</td>
+                    <td>
+                      {editingApiKey === user.id ? (
+                        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                          <input
+                            type="password"
+                            value={newApiKey}
+                            onChange={(e) => setNewApiKey(e.target.value)}
+                            placeholder="sk-ant-..."
+                            style={{ width: '120px', fontSize: '0.85rem', padding: '0.25rem' }}
+                          />
+                          <button
+                            className="btn-approve"
+                            onClick={() => handleSaveApiKey(user.id)}
+                            disabled={savingApiKey || !newApiKey}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => { setEditingApiKey(null); setNewApiKey(''); }}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8rem' }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                          {user.has_api_key ? (
+                            <>
+                              <span className="status-badge status-approved">Has Key</span>
+                              <button
+                                onClick={() => handleClearApiKey(user.id)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', color: '#e74c3c' }}
+                                title="Remove API key"
+                              >
+                                x
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => setEditingApiKey(user.id)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--accent-color)' }}
+                            >
+                              + Add Key
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <div className="status-badges">
                         {user.is_admin && (
