@@ -8,6 +8,7 @@ function AdminRecommendations({ setIsAuthenticated }) {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(null); // 'strategies', 'weights', 'thresholds', or null
   const [message, setMessage] = useState('');
   const [activeTab, setActiveTab] = useState('strategies');
   const [testFormData, setTestFormData] = useState({
@@ -50,6 +51,7 @@ function AdminRecommendations({ setIsAuthenticated }) {
   const saveStrategies = async () => {
     setSaving(true);
     setMessage('');
+    setSaveSuccess(null);
     try {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/admin/recommendations/strategies', {
@@ -62,8 +64,12 @@ function AdminRecommendations({ setIsAuthenticated }) {
       });
 
       if (response.ok) {
-        setMessage('Strategies saved successfully!');
-        setTimeout(() => setMessage(''), 3000);
+        setSaveSuccess('strategies');
+        setMessage('Strategy settings saved successfully!');
+        setTimeout(() => {
+          setMessage('');
+          setSaveSuccess(null);
+        }, 4000);
       } else {
         setMessage('Failed to save strategies');
       }
@@ -78,6 +84,7 @@ function AdminRecommendations({ setIsAuthenticated }) {
   const saveWeights = async () => {
     setSaving(true);
     setMessage('');
+    setSaveSuccess(null);
     try {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/admin/recommendations/weights', {
@@ -90,8 +97,12 @@ function AdminRecommendations({ setIsAuthenticated }) {
       });
 
       if (response.ok) {
-        setMessage('Weights saved successfully!');
-        setTimeout(() => setMessage(''), 3000);
+        setSaveSuccess('weights');
+        setMessage('Scoring weights saved successfully!');
+        setTimeout(() => {
+          setMessage('');
+          setSaveSuccess(null);
+        }, 4000);
       } else {
         setMessage('Failed to save weights');
       }
@@ -106,6 +117,7 @@ function AdminRecommendations({ setIsAuthenticated }) {
   const saveThresholds = async () => {
     setSaving(true);
     setMessage('');
+    setSaveSuccess(null);
     try {
       const token = localStorage.getItem('token');
       const response = await fetch('/api/admin/recommendations/thresholds', {
@@ -118,8 +130,12 @@ function AdminRecommendations({ setIsAuthenticated }) {
       });
 
       if (response.ok) {
+        setSaveSuccess('thresholds');
         setMessage('Thresholds saved successfully!');
-        setTimeout(() => setMessage(''), 3000);
+        setTimeout(() => {
+          setMessage('');
+          setSaveSuccess(null);
+        }, 4000);
       } else {
         setMessage('Failed to save thresholds');
       }
@@ -467,13 +483,34 @@ function AdminRecommendations({ setIsAuthenticated }) {
                 </table>
               </div>
 
-              <div className="settings-actions" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
-                <button className="btn btn-primary" onClick={saveStrategies} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Strategy Settings'}
+              <div className="settings-actions" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={saveStrategies}
+                  disabled={saving}
+                  style={{
+                    background: saveSuccess === 'strategies' ? '#28a745' : undefined,
+                    borderColor: saveSuccess === 'strategies' ? '#28a745' : undefined,
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  {saving ? 'Saving...' : saveSuccess === 'strategies' ? '✓ Saved!' : 'Save Strategy Settings'}
                 </button>
                 <button className="btn btn-secondary" onClick={() => resetToDefaults('recommendation_strategies')} disabled={saving}>
                   Reset to Defaults
                 </button>
+                {saveSuccess === 'strategies' && (
+                  <span style={{
+                    color: '#28a745',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    animation: 'fadeIn 0.3s ease'
+                  }}>
+                    ✓ Settings saved successfully
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -515,13 +552,34 @@ function AdminRecommendations({ setIsAuthenticated }) {
                 </div>
               ))}
 
-              <div className="settings-actions" style={{ display: 'flex', gap: '1rem' }}>
-                <button className="btn btn-primary" onClick={saveWeights} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Weights'}
+              <div className="settings-actions" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={saveWeights}
+                  disabled={saving}
+                  style={{
+                    background: saveSuccess === 'weights' ? '#28a745' : undefined,
+                    borderColor: saveSuccess === 'weights' ? '#28a745' : undefined,
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  {saving ? 'Saving...' : saveSuccess === 'weights' ? '✓ Saved!' : 'Save Weights'}
                 </button>
                 <button className="btn btn-secondary" onClick={() => resetToDefaults('recommendation_weights')} disabled={saving}>
                   Reset to Defaults
                 </button>
+                {saveSuccess === 'weights' && (
+                  <span style={{
+                    color: '#28a745',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    animation: 'fadeIn 0.3s ease'
+                  }}>
+                    ✓ Weights saved successfully
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -560,13 +618,34 @@ function AdminRecommendations({ setIsAuthenticated }) {
                 </div>
               </div>
 
-              <div className="settings-actions" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
-                <button className="btn btn-primary" onClick={saveThresholds} disabled={saving}>
-                  {saving ? 'Saving...' : 'Save Thresholds'}
+              <div className="settings-actions" style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={saveThresholds}
+                  disabled={saving}
+                  style={{
+                    background: saveSuccess === 'thresholds' ? '#28a745' : undefined,
+                    borderColor: saveSuccess === 'thresholds' ? '#28a745' : undefined,
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  {saving ? 'Saving...' : saveSuccess === 'thresholds' ? '✓ Saved!' : 'Save Thresholds'}
                 </button>
                 <button className="btn btn-secondary" onClick={() => resetToDefaults('recommendation_thresholds')} disabled={saving}>
                   Reset to Defaults
                 </button>
+                {saveSuccess === 'thresholds' && (
+                  <span style={{
+                    color: '#28a745',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    animation: 'fadeIn 0.3s ease'
+                  }}>
+                    ✓ Thresholds saved successfully
+                  </span>
+                )}
               </div>
             </div>
           )}
