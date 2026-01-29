@@ -562,7 +562,7 @@ app.get('/api/items/:id', authenticateToken, async (req, res) => {
 
 // Create item
 app.post('/api/items', authenticateToken, upload.single('image'), async (req, res) => {
-  const { name, description, location, category, recommendation, recommendationReasoning, answers, status } = req.body;
+  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
   if (req.file) {
@@ -590,7 +590,22 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
       ]
     );
 
-    res.status(201).json({ item: result.rows[0] });
+    const item = result.rows[0];
+
+    // Save item owners if provided
+    if (ownerIds) {
+      const parsedOwnerIds = JSON.parse(ownerIds);
+      if (Array.isArray(parsedOwnerIds) && parsedOwnerIds.length > 0) {
+        for (const memberId of parsedOwnerIds) {
+          await pool.query(
+            'INSERT INTO item_members (item_id, member_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [item.id, memberId]
+          );
+        }
+      }
+    }
+
+    res.status(201).json({ item });
   } catch (error) {
     console.error('Create item error:', error);
     res.status(500).json({ error: 'Server error' });
