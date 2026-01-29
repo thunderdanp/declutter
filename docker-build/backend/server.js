@@ -1691,6 +1691,76 @@ app.put('/api/notification-preferences', authenticateToken, async (req, res) => 
   }
 });
 
+// Get user's API settings
+app.get('/api/user/api-settings', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT anthropic_api_key, image_analysis_enabled FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    res.json({
+      hasApiKey: !!user.anthropic_api_key,
+      apiKeyPreview: user.anthropic_api_key ? `sk-...${user.anthropic_api_key.slice(-4)}` : null,
+      imageAnalysisEnabled: user.image_analysis_enabled !== false
+    });
+  } catch (error) {
+    console.error('Get API settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user's API settings
+app.put('/api/user/api-settings', authenticateToken, async (req, res) => {
+  try {
+    const { anthropic_api_key, image_analysis_enabled, clear_api_key } = req.body;
+
+    const updates = [];
+    const params = [];
+    let paramCount = 1;
+
+    if (clear_api_key) {
+      updates.push(`anthropic_api_key = NULL`);
+    } else if (anthropic_api_key !== undefined && anthropic_api_key !== '') {
+      updates.push(`anthropic_api_key = $${paramCount++}`);
+      params.push(anthropic_api_key);
+    }
+
+    if (image_analysis_enabled !== undefined) {
+      updates.push(`image_analysis_enabled = $${paramCount++}`);
+      params.push(image_analysis_enabled);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No updates provided' });
+    }
+
+    params.push(req.user.userId);
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING anthropic_api_key, image_analysis_enabled`;
+
+    const result = await pool.query(query, params);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    res.json({
+      hasApiKey: !!user.anthropic_api_key,
+      apiKeyPreview: user.anthropic_api_key ? `sk-...${user.anthropic_api_key.slice(-4)}` : null,
+      imageAnalysisEnabled: user.image_analysis_enabled !== false
+    });
+  } catch (error) {
+    console.error('Update API settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

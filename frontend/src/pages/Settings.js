@@ -19,11 +19,20 @@ function Settings({ setIsAuthenticated }) {
   });
   const [savingNotifications, setSavingNotifications] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState('');
+  const [apiSettings, setApiSettings] = useState({
+    hasApiKey: false,
+    apiKeyPreview: null,
+    imageAnalysisEnabled: true
+  });
+  const [newApiKey, setNewApiKey] = useState('');
+  const [savingApiSettings, setSavingApiSettings] = useState(false);
+  const [apiMessage, setApiMessage] = useState('');
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     fetchNotificationPreferences();
+    fetchApiSettings();
   }, []);
 
   const fetchNotificationPreferences = async () => {
@@ -44,6 +53,142 @@ function Settings({ setIsAuthenticated }) {
       }
     } catch (error) {
       console.error('Error fetching notification preferences:', error);
+    }
+  };
+
+  const fetchApiSettings = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/user/api-settings', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setApiSettings({
+          hasApiKey: data.hasApiKey,
+          apiKeyPreview: data.apiKeyPreview,
+          imageAnalysisEnabled: data.imageAnalysisEnabled
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching API settings:', error);
+    }
+  };
+
+  const handleToggleImageAnalysis = async () => {
+    setSavingApiSettings(true);
+    setApiMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/user/api-settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          image_analysis_enabled: !apiSettings.imageAnalysisEnabled
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setApiSettings(prev => ({
+          ...prev,
+          imageAnalysisEnabled: data.imageAnalysisEnabled
+        }));
+        setApiMessage('Settings updated!');
+        setTimeout(() => setApiMessage(''), 3000);
+      } else {
+        setApiMessage('Failed to update settings');
+      }
+    } catch (err) {
+      setApiMessage('Network error. Please try again.');
+    } finally {
+      setSavingApiSettings(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!newApiKey.trim()) {
+      setApiMessage('Please enter an API key');
+      return;
+    }
+
+    setSavingApiSettings(true);
+    setApiMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/user/api-settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          anthropic_api_key: newApiKey
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setApiSettings(prev => ({
+          ...prev,
+          hasApiKey: data.hasApiKey,
+          apiKeyPreview: data.apiKeyPreview
+        }));
+        setNewApiKey('');
+        setApiMessage('API key saved!');
+        setTimeout(() => setApiMessage(''), 3000);
+      } else {
+        setApiMessage('Failed to save API key');
+      }
+    } catch (err) {
+      setApiMessage('Network error. Please try again.');
+    } finally {
+      setSavingApiSettings(false);
+    }
+  };
+
+  const handleClearApiKey = async () => {
+    if (!window.confirm('Are you sure you want to remove your API key?')) {
+      return;
+    }
+
+    setSavingApiSettings(true);
+    setApiMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/user/api-settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          clear_api_key: true
+        })
+      });
+
+      if (response.ok) {
+        setApiSettings(prev => ({
+          ...prev,
+          hasApiKey: false,
+          apiKeyPreview: null
+        }));
+        setApiMessage('API key removed');
+        setTimeout(() => setApiMessage(''), 3000);
+      } else {
+        setApiMessage('Failed to remove API key');
+      }
+    } catch (err) {
+      setApiMessage('Network error. Please try again.');
+    } finally {
+      setSavingApiSettings(false);
     }
   };
 
@@ -247,6 +392,77 @@ function Settings({ setIsAuthenticated }) {
             >
               {savingNotifications ? 'Saving...' : 'Save Notification Preferences'}
             </button>
+          </div>
+
+          <div className="card">
+            <h2 className="section-heading">AI Image Analysis</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+              Configure how image analysis works for your items. You can use your own Anthropic API key or use the system default (if available).
+            </p>
+
+            <div className="setting-item">
+              <div className="setting-info">
+                <h3>Enable Image Analysis</h3>
+                <p>Allow AI to analyze images of your items</p>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={apiSettings.imageAnalysisEnabled}
+                  onChange={handleToggleImageAnalysis}
+                  disabled={savingApiSettings}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+              <div className="setting-info" style={{ marginBottom: '1rem' }}>
+                <h3>Your Anthropic API Key</h3>
+                <p>
+                  {apiSettings.hasApiKey
+                    ? `Current key: ${apiSettings.apiKeyPreview}`
+                    : 'No API key configured. Using system default if available.'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <input
+                  type="password"
+                  value={newApiKey}
+                  onChange={(e) => setNewApiKey(e.target.value)}
+                  placeholder="sk-ant-..."
+                  style={{ flex: 1, minWidth: '200px' }}
+                />
+                <button
+                  onClick={handleSaveApiKey}
+                  className="btn btn-primary"
+                  disabled={savingApiSettings || !newApiKey.trim()}
+                >
+                  {savingApiSettings ? 'Saving...' : 'Save Key'}
+                </button>
+                {apiSettings.hasApiKey && (
+                  <button
+                    onClick={handleClearApiKey}
+                    className="btn btn-secondary"
+                    disabled={savingApiSettings}
+                  >
+                    Remove Key
+                  </button>
+                )}
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                Get your API key from{' '}
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">
+                  console.anthropic.com
+                </a>
+              </p>
+            </div>
+
+            {apiMessage && (
+              <div className={`${apiMessage.includes('saved') || apiMessage.includes('updated') || apiMessage.includes('removed') ? 'success-message' : 'error-message'}`}>
+                {apiMessage}
+              </div>
+            )}
           </div>
 
           <div className="card">
