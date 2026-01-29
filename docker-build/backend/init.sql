@@ -391,6 +391,43 @@ CREATE TABLE IF NOT EXISTS api_usage_logs (
 );
 
 -- ============================================================================
+-- ACTIVITY LOGS TABLE
+-- ============================================================================
+-- Comprehensive audit trail for tracking all system activities.
+-- Used for security monitoring, debugging, and compliance.
+--
+-- Activity Types:
+--   USER: login, logout, password_change, profile_update, register
+--   ITEM: create, update, delete, decision_recorded
+--   ADMIN: user_approved, user_deleted, settings_changed, announcement_sent,
+--          category_created, category_updated, category_deleted,
+--          template_updated, recommendation_settings_changed
+--   SYSTEM: login_failed, api_error, permission_denied
+--
+-- Columns:
+--   user_id: User who performed the action (null for system events)
+--   action: The action performed (e.g., 'login', 'item_create')
+--   action_type: Category of action (USER, ITEM, ADMIN, SYSTEM)
+--   resource_type: Type of resource affected (user, item, setting, etc.)
+--   resource_id: ID of the affected resource
+--   details: JSON object with additional context
+--   ip_address: Client IP address
+--   user_agent: Client browser/app info
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    action VARCHAR(100) NOT NULL,
+    action_type VARCHAR(20) NOT NULL,
+    resource_type VARCHAR(50),
+    resource_id INTEGER,
+    details JSONB,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================================
 -- INDEXES
 -- ============================================================================
 -- Performance indexes for common query patterns
@@ -410,6 +447,10 @@ CREATE INDEX idx_announcements_created_at ON announcements(created_at);
 CREATE INDEX idx_notification_preferences_user_id ON notification_preferences(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_user_id ON api_usage_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_usage_logs_created_at ON api_usage_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_user_id ON activity_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_action_type ON activity_logs(action_type);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_resource ON activity_logs(resource_type, resource_id);
 
 -- ============================================================================
 -- TRIGGER FUNCTION

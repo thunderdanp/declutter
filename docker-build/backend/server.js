@@ -141,6 +141,36 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// ============================================
+// ACTIVITY LOGGING HELPER
+// ============================================
+/**
+ * Logs an activity to the audit trail
+ * @param {Object} params - Activity parameters
+ * @param {number|null} params.userId - User who performed the action
+ * @param {string} params.action - Action performed (e.g., 'login', 'item_create')
+ * @param {string} params.actionType - Category: USER, ITEM, ADMIN, SYSTEM
+ * @param {string|null} params.resourceType - Type of resource (user, item, setting, etc.)
+ * @param {number|null} params.resourceId - ID of affected resource
+ * @param {Object|null} params.details - Additional context as JSON
+ * @param {Object|null} params.req - Express request object for IP/user agent
+ */
+const logActivity = async ({ userId, action, actionType, resourceType = null, resourceId = null, details = null, req = null }) => {
+  try {
+    const ipAddress = req ? (req.headers['x-forwarded-for'] || req.connection?.remoteAddress || req.ip) : null;
+    const userAgent = req ? req.headers['user-agent'] : null;
+
+    await pool.query(
+      `INSERT INTO activity_logs (user_id, action, action_type, resource_type, resource_id, details, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [userId, action, actionType, resourceType, resourceId, details ? JSON.stringify(details) : null, ipAddress, userAgent]
+    );
+  } catch (error) {
+    console.error('Error logging activity:', error);
+    // Don't throw - logging failures shouldn't break the main operation
+  }
+};
+
 // ============= AUTH ROUTES =============
 
 // Register
@@ -182,6 +212,17 @@ app.post('/api/auth/register', [
       { expiresIn: '7d' }
     );
 
+    // Log registration
+    await logActivity({
+      userId: user.id,
+      action: 'register',
+      actionType: 'USER',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { email: user.email },
+      req
+    });
+
     res.status(201).json({
       token,
       user: {
@@ -216,6 +257,14 @@ app.post('/api/auth/login', [
     );
 
     if (result.rows.length === 0) {
+      // Log failed login - unknown email
+      await logActivity({
+        userId: null,
+        action: 'login_failed',
+        actionType: 'SYSTEM',
+        details: { email, reason: 'unknown_email' },
+        req
+      });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -223,6 +272,16 @@ app.post('/api/auth/login', [
     const validPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!validPassword) {
+      // Log failed login - wrong password
+      await logActivity({
+        userId: user.id,
+        action: 'login_failed',
+        actionType: 'SYSTEM',
+        resourceType: 'user',
+        resourceId: user.id,
+        details: { email, reason: 'invalid_password' },
+        req
+      });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
@@ -231,6 +290,17 @@ app.post('/api/auth/login', [
       process.env.JWT_SECRET || 'your-secret-key-change-this-in-production',
       { expiresIn: '7d' }
     );
+
+    // Log successful login
+    await logActivity({
+      userId: user.id,
+      action: 'login',
+      actionType: 'USER',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { email: user.email },
+      req
+    });
 
     res.json({
       token,
@@ -307,6 +377,17 @@ app.post('/api/profile', authenticateToken, async (req, res) => {
        RETURNING profile_data`,
       [req.user.userId, JSON.stringify(profileData)]
     );
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'profile_updated',
+      actionType: 'user',
+      resourceType: 'profile',
+      resourceId: req.user.userId,
+      details: { profileType: profileData.declutterPersonality },
+      req
+    });
 
     res.json({ profile: result.rows[0].profile_data });
   } catch (error) {
@@ -679,6 +760,17 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
       }
     }
 
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'item_created',
+      actionType: 'item',
+      resourceType: 'item',
+      resourceId: item.id,
+      details: { name: item.name, category: item.category, recommendation: item.recommendation },
+      req
+    });
+
     res.status(201).json({ item });
   } catch (error) {
     console.error('Create item error:', error);
@@ -765,6 +857,18 @@ app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req,
       }
     }
 
+    // Log activity
+    const updatedItem = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'item_updated',
+      actionType: 'item',
+      resourceType: 'item',
+      resourceId: updatedItem.id,
+      details: { name: updatedItem.name, fieldsUpdated: updates.map(u => u.split(' = ')[0]) },
+      req
+    });
+
     res.json({ item: result.rows[0] });
   } catch (error) {
     console.error('Update item error:', error);
@@ -783,6 +887,18 @@ app.delete('/api/items/:id', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Item not found' });
     }
+
+    // Log activity
+    const deletedItem = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'item_deleted',
+      actionType: 'item',
+      resourceType: 'item',
+      resourceId: deletedItem.id,
+      details: { name: deletedItem.name, category: deletedItem.category },
+      req
+    });
 
     res.json({ message: 'Item deleted successfully' });
   } catch (error) {
@@ -813,6 +929,23 @@ app.put('/api/items/:id/decision', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
 
+    // Log activity
+    const item = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'decision_recorded',
+      actionType: 'item',
+      resourceType: 'item',
+      resourceId: item.id,
+      details: {
+        name: item.name,
+        decision,
+        recommendation: item.recommendation,
+        followedRecommendation: decision === item.recommendation
+      },
+      req
+    });
+
     res.json({ item: result.rows[0] });
   } catch (error) {
     console.error('Record decision error:', error);
@@ -834,6 +967,18 @@ app.delete('/api/items/:id/decision', authenticateToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Item not found' });
     }
+
+    // Log activity
+    const item = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'decision_cleared',
+      actionType: 'item',
+      resourceType: 'item',
+      resourceId: item.id,
+      details: { name: item.name },
+      req
+    });
 
     res.json({ item: result.rows[0] });
   } catch (error) {
@@ -958,6 +1103,18 @@ app.patch('/api/admin/users/:id/approve', authenticateToken, requireAdmin, async
   try {
     const { id } = req.params;
     await pool.query('UPDATE users SET is_approved = true WHERE id = $1', [id]);
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'user_approved',
+      actionType: 'admin',
+      resourceType: 'user',
+      resourceId: parseInt(id),
+      details: { approvedUserId: parseInt(id) },
+      req
+    });
+
     res.json({ message: 'User approved' });
   } catch (error) {
     console.error('Approve user error:', error);
@@ -1001,6 +1158,23 @@ app.put('/api/admin/users/:id/api-settings', authenticateToken, requireAdmin, as
     }
 
     const user = result.rows[0];
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'user_api_settings_updated',
+      actionType: 'admin',
+      resourceType: 'user',
+      resourceId: parseInt(id),
+      details: {
+        targetUserId: parseInt(id),
+        apiKeyCleared: !!clear_api_key,
+        apiKeySet: !!anthropic_api_key && !clear_api_key,
+        imageAnalysisEnabled: image_analysis_enabled
+      },
+      req
+    });
+
     res.json({
       id: user.id,
       hasApiKey: !!user.anthropic_api_key,
@@ -1022,7 +1196,23 @@ app.delete('/api/admin/users/:id', authenticateToken, requireAdmin, async (req, 
       return res.status(400).json({ error: 'Cannot delete your own account' });
     }
 
+    // Get user info before deleting for logging
+    const userResult = await pool.query('SELECT email, first_name, last_name FROM users WHERE id = $1', [id]);
+    const deletedUserInfo = userResult.rows[0];
+
     await pool.query('DELETE FROM users WHERE id = $1', [id]);
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'user_deleted',
+      actionType: 'admin',
+      resourceType: 'user',
+      resourceId: parseInt(id),
+      details: { deletedUserId: parseInt(id), deletedUserEmail: deletedUserInfo?.email },
+      req
+    });
+
     res.json({ message: 'User deleted' });
   } catch (error) {
     console.error('Delete user error:', error);
@@ -1238,6 +1428,19 @@ app.post('/api/admin/email-templates', authenticateToken, requireAdmin, [
       'INSERT INTO email_templates (name, subject, body, description, trigger_event, is_enabled) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
       [name, subject, body, description || null, trigger_event || null, is_enabled !== false]
     );
+
+    // Log activity
+    const template = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'email_template_created',
+      actionType: 'admin',
+      resourceType: 'email_template',
+      resourceId: template.id,
+      details: { name: template.name, triggerEvent: template.trigger_event },
+      req
+    });
+
     res.status(201).json({ template: result.rows[0] });
   } catch (error) {
     if (error.code === '23505') {
@@ -1259,6 +1462,19 @@ app.put('/api/admin/email-templates/:id', authenticateToken, requireAdmin, async
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Template not found' });
     }
+
+    // Log activity
+    const template = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'email_template_updated',
+      actionType: 'admin',
+      resourceType: 'email_template',
+      resourceId: template.id,
+      details: { name: template.name, triggerEvent: template.trigger_event, enabled: template.is_enabled },
+      req
+    });
+
     res.json({ template: result.rows[0] });
   } catch (error) {
     console.error('Update template error:', error);
@@ -1279,6 +1495,17 @@ app.delete('/api/admin/email-templates/:id', authenticateToken, requireAdmin, as
     }
 
     await pool.query('DELETE FROM email_templates WHERE id = $1', [req.params.id]);
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'email_template_deleted',
+      actionType: 'admin',
+      resourceType: 'email_template',
+      resourceId: parseInt(req.params.id),
+      req
+    });
+
     res.json({ message: 'Template deleted' });
   } catch (error) {
     console.error('Delete template error:', error);
@@ -1339,6 +1566,19 @@ app.post('/api/admin/announcements', authenticateToken, requireAdmin, [
       'INSERT INTO announcements (title, content, created_by) VALUES ($1, $2, $3) RETURNING *',
       [title, content, req.user.userId]
     );
+
+    // Log activity
+    const announcement = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'announcement_created',
+      actionType: 'admin',
+      resourceType: 'announcement',
+      resourceId: announcement.id,
+      details: { title: announcement.title },
+      req
+    });
+
     res.status(201).json({ announcement: result.rows[0] });
   } catch (error) {
     console.error('Create announcement error:', error);
@@ -1364,6 +1604,19 @@ app.put('/api/admin/announcements/:id', authenticateToken, requireAdmin, async (
       'UPDATE announcements SET title = $1, content = $2 WHERE id = $3 RETURNING *',
       [title, content, req.params.id]
     );
+
+    // Log activity
+    const announcement = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'announcement_updated',
+      actionType: 'admin',
+      resourceType: 'announcement',
+      resourceId: announcement.id,
+      details: { title: announcement.title },
+      req
+    });
+
     res.json({ announcement: result.rows[0] });
   } catch (error) {
     console.error('Update announcement error:', error);
@@ -1374,10 +1627,23 @@ app.put('/api/admin/announcements/:id', authenticateToken, requireAdmin, async (
 // Delete announcement
 app.delete('/api/admin/announcements/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM announcements WHERE id = $1 RETURNING id', [req.params.id]);
+    const result = await pool.query('DELETE FROM announcements WHERE id = $1 RETURNING *', [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Announcement not found' });
     }
+
+    // Log activity
+    const announcement = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'announcement_deleted',
+      actionType: 'admin',
+      resourceType: 'announcement',
+      resourceId: announcement.id,
+      details: { title: announcement.title },
+      req
+    });
+
     res.json({ message: 'Announcement deleted' });
   } catch (error) {
     console.error('Delete announcement error:', error);
@@ -1399,6 +1665,17 @@ app.post('/api/admin/announcements/:id/send', authenticateToken, requireAdmin, a
 
     const result = await emailService.sendAnnouncement(req.params.id);
     if (result.success) {
+      // Log activity
+      await logActivity({
+        userId: req.user.userId,
+        action: 'announcement_sent',
+        actionType: 'admin',
+        resourceType: 'announcement',
+        resourceId: parseInt(req.params.id),
+        details: { sentCount: result.sentCount, totalUsers: result.totalUsers },
+        req
+      });
+
       res.json({
         message: `Announcement sent to ${result.sentCount} users`,
         sentCount: result.sentCount,
@@ -1640,6 +1917,19 @@ app.post('/api/admin/categories', authenticateToken, requireAdmin, [
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [name, slug, display_name, icon || null, color || null, sort_order || 0, is_default || false]
     );
+
+    // Log activity
+    const category = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'category_created',
+      actionType: 'admin',
+      resourceType: 'category',
+      resourceId: category.id,
+      details: { name: category.name, displayName: category.display_name },
+      req
+    });
+
     res.status(201).json({ category: result.rows[0] });
   } catch (error) {
     if (error.code === '23505') {
@@ -1693,6 +1983,18 @@ app.put('/api/admin/categories/:id', authenticateToken, requireAdmin, async (req
       );
     }
 
+    // Log activity
+    const updatedCategory = result.rows[0];
+    await logActivity({
+      userId: req.user.userId,
+      action: 'category_updated',
+      actionType: 'admin',
+      resourceType: 'category',
+      resourceId: updatedCategory.id,
+      details: { name: updatedCategory.name, displayName: updatedCategory.display_name },
+      req
+    });
+
     res.json({ category: result.rows[0] });
   } catch (error) {
     if (error.code === '23505') {
@@ -1731,6 +2033,17 @@ app.delete('/api/admin/categories/:id', authenticateToken, requireAdmin, async (
 
     // Delete the category
     await pool.query('DELETE FROM categories WHERE id = $1', [req.params.id]);
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'category_deleted',
+      actionType: 'admin',
+      resourceType: 'category',
+      resourceId: parseInt(req.params.id),
+      details: { name: category.name, movedToCategory: defaultSlug },
+      req
+    });
 
     res.json({ message: 'Category deleted successfully', movedToCategory: defaultSlug });
   } catch (error) {
@@ -1783,6 +2096,21 @@ app.post('/api/admin/categories/merge', authenticateToken, requireAdmin, [
 
     // Delete source category
     await pool.query('DELETE FROM categories WHERE id = $1', [sourceId]);
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'categories_merged',
+      actionType: 'admin',
+      resourceType: 'category',
+      resourceId: targetId,
+      details: {
+        sourceCategory: sourceCategory.name,
+        targetCategory: targetCategory.name,
+        itemsMoved: updateResult.rowCount
+      },
+      req
+    });
 
     res.json({
       message: 'Categories merged successfully',
@@ -2042,6 +2370,16 @@ app.put('/api/admin/recommendations/weights', authenticateToken, requireAdmin, a
       [JSON.stringify(weights)]
     );
 
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'recommendation_weights_updated',
+      actionType: 'admin',
+      resourceType: 'settings',
+      details: { settingType: 'weights' },
+      req
+    });
+
     res.json({ message: 'Weights updated successfully' });
   } catch (error) {
     console.error('Update recommendation weights error:', error);
@@ -2065,6 +2403,16 @@ app.put('/api/admin/recommendations/thresholds', authenticateToken, requireAdmin
       [JSON.stringify(thresholds)]
     );
 
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'recommendation_thresholds_updated',
+      actionType: 'admin',
+      resourceType: 'settings',
+      details: { settingType: 'thresholds' },
+      req
+    });
+
     res.json({ message: 'Thresholds updated successfully' });
   } catch (error) {
     console.error('Update recommendation thresholds error:', error);
@@ -2087,6 +2435,16 @@ app.put('/api/admin/recommendations/strategies', authenticateToken, requireAdmin
        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP`,
       [JSON.stringify(strategies)]
     );
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'recommendation_strategies_updated',
+      actionType: 'admin',
+      resourceType: 'settings',
+      details: { settingType: 'strategies', activeStrategy: strategies.active },
+      req
+    });
 
     res.json({ message: 'Strategies updated successfully' });
   } catch (error) {
@@ -2186,6 +2544,16 @@ app.post('/api/admin/recommendations/reset', authenticateToken, requireAdmin, as
         );
       }
     }
+
+    // Log activity
+    await logActivity({
+      userId: req.user.userId,
+      action: 'recommendation_settings_reset',
+      actionType: 'admin',
+      resourceType: 'settings',
+      details: { settingType: settingType || 'all' },
+      req
+    });
 
     res.json({ message: 'Settings reset to defaults' });
   } catch (error) {
@@ -2529,6 +2897,205 @@ app.use((err, req, res, next) => {
     return res.status(400).json({ error: err.message });
   }
   next();
+});
+
+// ============================================
+// ACTIVITY LOGS ENDPOINTS
+// ============================================
+
+// Get activity logs with filtering and pagination
+app.get('/api/admin/activity-logs', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 50,
+      actionType,
+      action,
+      userId,
+      startDate,
+      endDate,
+      search
+    } = req.query;
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const params = [];
+    let paramCount = 1;
+    const conditions = [];
+
+    if (actionType) {
+      conditions.push(`al.action_type = $${paramCount++}`);
+      params.push(actionType);
+    }
+
+    if (action) {
+      conditions.push(`al.action = $${paramCount++}`);
+      params.push(action);
+    }
+
+    if (userId) {
+      conditions.push(`al.user_id = $${paramCount++}`);
+      params.push(parseInt(userId));
+    }
+
+    if (startDate) {
+      conditions.push(`al.created_at >= $${paramCount++}`);
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      conditions.push(`al.created_at <= $${paramCount++}`);
+      params.push(endDate);
+    }
+
+    if (search) {
+      conditions.push(`(al.action ILIKE $${paramCount} OR al.details::text ILIKE $${paramCount} OR u.email ILIKE $${paramCount})`);
+      params.push(`%${search}%`);
+      paramCount++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Get total count
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total FROM activity_logs al LEFT JOIN users u ON al.user_id = u.id ${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total);
+
+    // Get logs with user info
+    params.push(parseInt(limit), offset);
+    const result = await pool.query(
+      `SELECT
+        al.*,
+        u.email as user_email,
+        u.first_name,
+        u.last_name
+       FROM activity_logs al
+       LEFT JOIN users u ON al.user_id = u.id
+       ${whereClause}
+       ORDER BY al.created_at DESC
+       LIMIT $${paramCount++} OFFSET $${paramCount}`,
+      params
+    );
+
+    res.json({
+      logs: result.rows,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Get activity logs error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get activity log summary/stats
+app.get('/api/admin/activity-logs/stats', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { period = '7' } = req.query;
+    const daysAgo = parseInt(period) || 7;
+
+    // Get counts by action type
+    const typeCountsResult = await pool.query(`
+      SELECT action_type, COUNT(*) as count
+      FROM activity_logs
+      WHERE created_at >= NOW() - INTERVAL '${daysAgo} days'
+      GROUP BY action_type
+      ORDER BY count DESC
+    `);
+
+    // Get counts by action
+    const actionCountsResult = await pool.query(`
+      SELECT action, COUNT(*) as count
+      FROM activity_logs
+      WHERE created_at >= NOW() - INTERVAL '${daysAgo} days'
+      GROUP BY action
+      ORDER BY count DESC
+      LIMIT 10
+    `);
+
+    // Get daily activity for chart
+    const dailyResult = await pool.query(`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as total,
+        COUNT(CASE WHEN action_type = 'user' THEN 1 END) as user_actions,
+        COUNT(CASE WHEN action_type = 'item' THEN 1 END) as item_actions,
+        COUNT(CASE WHEN action_type = 'admin' THEN 1 END) as admin_actions,
+        COUNT(CASE WHEN action_type = 'system' THEN 1 END) as system_events
+      FROM activity_logs
+      WHERE created_at >= NOW() - INTERVAL '${daysAgo} days'
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `);
+
+    // Get most active users
+    const activeUsersResult = await pool.query(`
+      SELECT
+        u.id,
+        u.email,
+        u.first_name,
+        u.last_name,
+        COUNT(*) as action_count
+      FROM activity_logs al
+      JOIN users u ON al.user_id = u.id
+      WHERE al.created_at >= NOW() - INTERVAL '${daysAgo} days'
+      GROUP BY u.id, u.email, u.first_name, u.last_name
+      ORDER BY action_count DESC
+      LIMIT 5
+    `);
+
+    // Get recent failed logins
+    const failedLoginsResult = await pool.query(`
+      SELECT
+        details->>'email' as email,
+        details->>'reason' as reason,
+        ip_address,
+        created_at
+      FROM activity_logs
+      WHERE action = 'login_failed'
+        AND created_at >= NOW() - INTERVAL '${daysAgo} days'
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+
+    res.json({
+      period: daysAgo,
+      typeCounts: typeCountsResult.rows,
+      actionCounts: actionCountsResult.rows,
+      dailyActivity: dailyResult.rows,
+      mostActiveUsers: activeUsersResult.rows,
+      recentFailedLogins: failedLoginsResult.rows
+    });
+  } catch (error) {
+    console.error('Get activity logs stats error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get distinct action types and actions for filters
+app.get('/api/admin/activity-logs/filters', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const actionTypesResult = await pool.query(`
+      SELECT DISTINCT action_type FROM activity_logs ORDER BY action_type
+    `);
+
+    const actionsResult = await pool.query(`
+      SELECT DISTINCT action FROM activity_logs ORDER BY action
+    `);
+
+    res.json({
+      actionTypes: actionTypesResult.rows.map(r => r.action_type),
+      actions: actionsResult.rows.map(r => r.action)
+    });
+  } catch (error) {
+    console.error('Get activity logs filters error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Start server

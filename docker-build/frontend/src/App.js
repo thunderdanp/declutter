@@ -22,6 +22,7 @@ import AdminCategories from './pages/AdminCategories';
 import AdminApiUsage from './pages/AdminApiUsage';
 import AdminRecommendations from './pages/AdminRecommendations';
 import AdminAnalytics from './pages/AdminAnalytics';
+import AdminActivityLogs from './pages/AdminActivityLogs';
 import HouseholdMembers from './pages/HouseholdMembers';
 import './App.css';
 
@@ -142,6 +143,9 @@ function App() {
         } />
         <Route path="/admin/analytics" element={
           isAuthenticated ? <AdminAnalytics setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/activity-logs" element={
+          isAuthenticated ? <AdminActivityLogs setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Landing />} />
           </Routes>
