@@ -560,6 +560,32 @@ app.get('/api/items/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Get item owners
+app.get('/api/items/:id/owners', authenticateToken, async (req, res) => {
+  try {
+    // Verify item belongs to user
+    const itemResult = await pool.query(
+      'SELECT id FROM items WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.userId]
+    );
+
+    if (itemResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const result = await pool.query(
+      'SELECT member_id FROM item_members WHERE item_id = $1',
+      [req.params.id]
+    );
+
+    const ownerIds = result.rows.map(row => row.member_id);
+    res.json({ ownerIds });
+  } catch (error) {
+    console.error('Get item owners error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Create item
 app.post('/api/items', authenticateToken, upload.single('image'), async (req, res) => {
   const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
@@ -614,7 +640,7 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req, re
 
 // Update item
 app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req, res) => {
-  const { name, description, location, category, recommendation, recommendationReasoning, answers, status } = req.body;
+  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
 
   try {
@@ -671,6 +697,24 @@ app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req,
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Item not found' });
+    }
+
+    // Update item owners if provided
+    if (ownerIds !== undefined) {
+      const parsedOwnerIds = Array.isArray(ownerIds) ? ownerIds : JSON.parse(ownerIds);
+
+      // Delete existing owners
+      await pool.query('DELETE FROM item_members WHERE item_id = $1', [req.params.id]);
+
+      // Insert new owners
+      if (Array.isArray(parsedOwnerIds) && parsedOwnerIds.length > 0) {
+        for (const memberId of parsedOwnerIds) {
+          await pool.query(
+            'INSERT INTO item_members (item_id, member_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [req.params.id, memberId]
+          );
+        }
+      }
     }
 
     res.json({ item: result.rows[0] });

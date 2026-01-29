@@ -17,6 +17,8 @@ function ItemDetail({ setIsAuthenticated }) {
   const [editData, setEditData] = useState(null);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [householdMembers, setHouseholdMembers] = useState([]);
+  const [selectedOwners, setSelectedOwners] = useState([]);
   const { isDark, toggleTheme } = useTheme();
   const { getCategoryBySlug } = useCategories();
 
@@ -30,7 +32,49 @@ function ItemDetail({ setIsAuthenticated }) {
   useEffect(() => {
     fetchItem();
     fetchProfile();
+    fetchHouseholdMembers();
+    fetchItemOwners();
   }, [id]);
+
+  const fetchHouseholdMembers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/household-members', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setHouseholdMembers(data.members || []);
+      }
+    } catch (error) {
+      console.error('Error fetching household members:', error);
+    }
+  };
+
+  const fetchItemOwners = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/items/${id}/owners`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedOwners(data.ownerIds || []);
+      }
+    } catch (error) {
+      console.error('Error fetching item owners:', error);
+    }
+  };
+
+  const toggleOwner = (memberId) => {
+    setSelectedOwners(prev =>
+      prev.includes(memberId)
+        ? prev.filter(id => id !== memberId)
+        : [...prev, memberId]
+    );
+  };
 
   const fetchItem = async () => {
     try {
@@ -175,7 +219,8 @@ function ItemDetail({ setIsAuthenticated }) {
           category: editData.category,
           recommendation: recommendationType,
           recommendationReasoning: reasoning,
-          answers: JSON.stringify(editData)
+          answers: JSON.stringify(editData),
+          ownerIds: selectedOwners
         })
       });
 
@@ -295,6 +340,26 @@ function ItemDetail({ setIsAuthenticated }) {
                     onChange={handleInputChange}
                   />
                 </div>
+
+                {householdMembers.length > 0 && (
+                  <div className="form-group">
+                    <label>Who owns this item? (Optional)</label>
+                    <div className="owner-chips">
+                      {householdMembers.map(member => (
+                        <button
+                          key={member.id}
+                          type="button"
+                          className={`owner-chip ${selectedOwners.includes(member.id) ? 'selected' : ''}`}
+                          onClick={() => toggleOwner(member.id)}
+                        >
+                          {member.name}
+                          {member.relationship && <span className="chip-relationship"> ({member.relationship})</span>}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="form-help">Select all household members who own this item</p>
+                  </div>
+                )}
               </div>
             </div>
 
