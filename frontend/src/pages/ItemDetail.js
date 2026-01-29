@@ -16,11 +16,21 @@ function ItemDetail({ setIsAuthenticated }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [savingDecision, setSavingDecision] = useState(false);
   const [profile, setProfile] = useState(null);
   const [householdMembers, setHouseholdMembers] = useState([]);
   const [selectedOwners, setSelectedOwners] = useState([]);
   const { isDark, toggleTheme } = useTheme();
   const { getCategoryBySlug } = useCategories();
+
+  const decisionOptions = [
+    { value: 'keep', label: 'Kept It', icon: '✅', color: '#27ae60' },
+    { value: 'accessible', label: 'Kept Accessible', icon: '🏠', color: '#2ecc71' },
+    { value: 'storage', label: 'Put in Storage', icon: '📦', color: '#3498db' },
+    { value: 'sell', label: 'Sold It', icon: '💰', color: '#f39c12' },
+    { value: 'donate', label: 'Donated It', icon: '🎁', color: '#9b59b6' },
+    { value: 'discard', label: 'Discarded It', icon: '🗑️', color: '#e74c3c' }
+  ];
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -142,6 +152,62 @@ function ItemDetail({ setIsAuthenticated }) {
       alert('Network error. Please try again.');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleRecordDecision = async (decision) => {
+    setSavingDecision(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/items/${id}/decision`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ decision })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setItem(data.item);
+      } else {
+        alert('Error recording decision. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Network error. Please try again.');
+    } finally {
+      setSavingDecision(false);
+    }
+  };
+
+  const handleClearDecision = async () => {
+    if (!window.confirm('Clear your recorded decision for this item?')) {
+      return;
+    }
+
+    setSavingDecision(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/items/${id}/decision`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setItem(data.item);
+      } else {
+        alert('Error clearing decision. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Network error. Please try again.');
+    } finally {
+      setSavingDecision(false);
     }
   };
 
@@ -509,6 +575,55 @@ function ItemDetail({ setIsAuthenticated }) {
                   <div className="reasoning-box">
                     <h3>Why This Makes Sense</h3>
                     <p>{item.recommendation_reasoning}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="card decision-card">
+                <h3 className="card-title">What Did You Do?</h3>
+                <p className="decision-subtitle">Record your final decision for this item</p>
+
+                {item.decision ? (
+                  <div className="decision-recorded">
+                    <div className="current-decision">
+                      <span className="decision-icon">
+                        {decisionOptions.find(d => d.value === item.decision)?.icon}
+                      </span>
+                      <span
+                        className="decision-label"
+                        style={{ color: decisionOptions.find(d => d.value === item.decision)?.color }}
+                      >
+                        {decisionOptions.find(d => d.value === item.decision)?.label}
+                      </span>
+                      {item.decision === item.recommendation && (
+                        <span className="followed-badge">✓ Followed recommendation</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleClearDecision}
+                      className="btn-clear-decision"
+                      disabled={savingDecision}
+                    >
+                      Change Decision
+                    </button>
+                  </div>
+                ) : (
+                  <div className="decision-options">
+                    {decisionOptions.map(option => (
+                      <button
+                        key={option.value}
+                        className={`decision-option ${option.value === item.recommendation ? 'recommended' : ''}`}
+                        onClick={() => handleRecordDecision(option.value)}
+                        disabled={savingDecision}
+                        style={{ '--option-color': option.color }}
+                      >
+                        <span className="option-icon">{option.icon}</span>
+                        <span className="option-label">{option.label}</span>
+                        {option.value === item.recommendation && (
+                          <span className="recommended-tag">Recommended</span>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>

@@ -744,6 +744,57 @@ app.delete('/api/items/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Record decision for an item
+app.put('/api/items/:id/decision', authenticateToken, async (req, res) => {
+  try {
+    const { decision } = req.body;
+    const validDecisions = ['keep', 'accessible', 'storage', 'sell', 'donate', 'discard'];
+
+    if (!decision || !validDecisions.includes(decision)) {
+      return res.status(400).json({ error: 'Invalid decision. Must be one of: ' + validDecisions.join(', ') });
+    }
+
+    const result = await pool.query(
+      `UPDATE items
+       SET decision = $1, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2 AND user_id = $3
+       RETURNING *`,
+      [decision, req.params.id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    res.json({ item: result.rows[0] });
+  } catch (error) {
+    console.error('Record decision error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Clear decision for an item
+app.delete('/api/items/:id/decision', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE items
+       SET decision = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [req.params.id, req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    res.json({ item: result.rows[0] });
+  } catch (error) {
+    console.error('Clear decision error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Get statistics
 app.get('/api/stats', authenticateToken, async (req, res) => {
   try {
@@ -2092,6 +2143,323 @@ app.post('/api/admin/recommendations/reset', authenticateToken, requireAdmin, as
     res.json({ message: 'Settings reset to defaults' });
   } catch (error) {
     console.error('Reset recommendation settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============================================
+// ANALYTICS DASHBOARD ENDPOINTS
+// ============================================
+
+// Get item trends over time
+app.get('/api/admin/analytics/item-trends', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { period = '30' } = req.query; // days
+    const daysAgo = parseInt(period) || 30;
+
+    // Items added per day
+    const itemsPerDay = await pool.query(`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `);
+
+    // Recommendations by type over time
+    const recommendationsByType = await pool.query(`
+      SELECT
+        DATE(created_at) as date,
+        recommendation,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        AND recommendation IS NOT NULL
+      GROUP BY DATE(created_at), recommendation
+      ORDER BY date ASC
+    `);
+
+    // Aggregate recommendations by type
+    const recommendationTotals = await pool.query(`
+      SELECT
+        recommendation,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        AND recommendation IS NOT NULL
+      GROUP BY recommendation
+      ORDER BY count DESC
+    `);
+
+    res.json({
+      itemsPerDay: itemsPerDay.rows,
+      recommendationsByType: recommendationsByType.rows,
+      recommendationTotals: recommendationTotals.rows,
+      period: daysAgo
+    });
+  } catch (error) {
+    console.error('Item trends error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get user activity metrics
+app.get('/api/admin/analytics/user-activity', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { period = '30' } = req.query;
+    const daysAgo = parseInt(period) || 30;
+
+    // Active users (users who added items in the period)
+    const activeUsers = await pool.query(`
+      SELECT COUNT(DISTINCT user_id) as active_users
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+    `);
+
+    // Total users
+    const totalUsers = await pool.query(`
+      SELECT COUNT(*) as total_users FROM users WHERE is_approved = true
+    `);
+
+    // Items per user (average and distribution)
+    const itemsPerUser = await pool.query(`
+      SELECT
+        u.id,
+        u.first_name,
+        u.last_name,
+        COUNT(i.id) as item_count
+      FROM users u
+      LEFT JOIN items i ON u.id = i.user_id AND i.created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+      WHERE u.is_approved = true
+      GROUP BY u.id, u.first_name, u.last_name
+      ORDER BY item_count DESC
+      LIMIT 10
+    `);
+
+    // Calculate average items per active user
+    const avgItemsResult = await pool.query(`
+      SELECT
+        COALESCE(AVG(item_count), 0) as avg_items,
+        COALESCE(MAX(item_count), 0) as max_items,
+        COALESCE(MIN(NULLIF(item_count, 0)), 0) as min_items
+      FROM (
+        SELECT user_id, COUNT(*) as item_count
+        FROM items
+        WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        GROUP BY user_id
+      ) subq
+    `);
+
+    // User registrations over time
+    const registrations = await pool.query(`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM users
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+      GROUP BY DATE(created_at)
+      ORDER BY date ASC
+    `);
+
+    res.json({
+      activeUsers: parseInt(activeUsers.rows[0]?.active_users) || 0,
+      totalUsers: parseInt(totalUsers.rows[0]?.total_users) || 0,
+      topUsers: itemsPerUser.rows,
+      averageItemsPerUser: parseFloat(avgItemsResult.rows[0]?.avg_items) || 0,
+      maxItemsPerUser: parseInt(avgItemsResult.rows[0]?.max_items) || 0,
+      minItemsPerUser: parseInt(avgItemsResult.rows[0]?.min_items) || 0,
+      registrations: registrations.rows,
+      period: daysAgo
+    });
+  } catch (error) {
+    console.error('User activity error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get category distribution
+app.get('/api/admin/analytics/categories', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { period = '30' } = req.query;
+    const daysAgo = parseInt(period) || 30;
+
+    // Items by category
+    const categoryDistribution = await pool.query(`
+      SELECT
+        COALESCE(category, 'Uncategorized') as category,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+      GROUP BY category
+      ORDER BY count DESC
+    `);
+
+    // Category trends over time
+    const categoryTrends = await pool.query(`
+      SELECT
+        DATE(created_at) as date,
+        COALESCE(category, 'Uncategorized') as category,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+      GROUP BY DATE(created_at), category
+      ORDER BY date ASC
+    `);
+
+    // Recommendations by category
+    const recommendationsByCategory = await pool.query(`
+      SELECT
+        COALESCE(category, 'Uncategorized') as category,
+        recommendation,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        AND recommendation IS NOT NULL
+      GROUP BY category, recommendation
+      ORDER BY category, count DESC
+    `);
+
+    res.json({
+      distribution: categoryDistribution.rows,
+      trends: categoryTrends.rows,
+      recommendationsByCategory: recommendationsByCategory.rows,
+      period: daysAgo
+    });
+  } catch (error) {
+    console.error('Category analytics error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get recommendation conversion tracking
+app.get('/api/admin/analytics/conversions', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { period = '30' } = req.query;
+    const daysAgo = parseInt(period) || 30;
+
+    // Items with decisions made (comparing recommendation to final decision)
+    const conversionData = await pool.query(`
+      SELECT
+        recommendation,
+        decision,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        AND recommendation IS NOT NULL
+        AND decision IS NOT NULL
+      GROUP BY recommendation, decision
+      ORDER BY recommendation, count DESC
+    `);
+
+    // Overall conversion rate (users following recommendations)
+    const overallConversion = await pool.query(`
+      SELECT
+        COUNT(CASE WHEN recommendation = decision THEN 1 END) as followed,
+        COUNT(CASE WHEN recommendation != decision THEN 1 END) as diverged,
+        COUNT(*) as total
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        AND recommendation IS NOT NULL
+        AND decision IS NOT NULL
+    `);
+
+    // Conversion by recommendation type
+    const conversionByType = await pool.query(`
+      SELECT
+        recommendation,
+        COUNT(CASE WHEN recommendation = decision THEN 1 END) as followed,
+        COUNT(CASE WHEN recommendation != decision THEN 1 END) as diverged,
+        COUNT(*) as total
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        AND recommendation IS NOT NULL
+        AND decision IS NOT NULL
+      GROUP BY recommendation
+      ORDER BY total DESC
+    `);
+
+    // Pending decisions (no decision yet)
+    const pendingDecisions = await pool.query(`
+      SELECT
+        recommendation,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        AND recommendation IS NOT NULL
+        AND decision IS NULL
+      GROUP BY recommendation
+      ORDER BY count DESC
+    `);
+
+    // Modified recommendations (admin changed the AI recommendation)
+    const modifiedRecommendations = await pool.query(`
+      SELECT
+        original_recommendation,
+        recommendation as modified_to,
+        COUNT(*) as count
+      FROM items
+      WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days'
+        AND original_recommendation IS NOT NULL
+        AND recommendation IS NOT NULL
+        AND original_recommendation != recommendation
+      GROUP BY original_recommendation, recommendation
+      ORDER BY count DESC
+    `);
+
+    const overall = overallConversion.rows[0] || { followed: 0, diverged: 0, total: 0 };
+    const followRate = overall.total > 0 ? (overall.followed / overall.total * 100).toFixed(1) : 0;
+
+    res.json({
+      conversionMatrix: conversionData.rows,
+      overall: {
+        followed: parseInt(overall.followed) || 0,
+        diverged: parseInt(overall.diverged) || 0,
+        total: parseInt(overall.total) || 0,
+        followRate: parseFloat(followRate)
+      },
+      byRecommendationType: conversionByType.rows,
+      pendingDecisions: pendingDecisions.rows,
+      modifiedRecommendations: modifiedRecommendations.rows,
+      period: daysAgo
+    });
+  } catch (error) {
+    console.error('Conversion analytics error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get dashboard summary
+app.get('/api/admin/analytics/summary', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { period = '30' } = req.query;
+    const daysAgo = parseInt(period) || 30;
+
+    // Quick stats
+    const stats = await pool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM items WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days') as items_added,
+        (SELECT COUNT(DISTINCT user_id) FROM items WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days') as active_users,
+        (SELECT COUNT(*) FROM items WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days' AND decision IS NOT NULL) as decisions_made,
+        (SELECT COUNT(*) FROM items WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days' AND recommendation = decision) as recommendations_followed,
+        (SELECT COUNT(*) FROM users WHERE created_at >= CURRENT_DATE - INTERVAL '${daysAgo} days') as new_users
+    `);
+
+    const s = stats.rows[0];
+    const followRate = s.decisions_made > 0 ? ((s.recommendations_followed / s.decisions_made) * 100).toFixed(1) : 0;
+
+    res.json({
+      itemsAdded: parseInt(s.items_added) || 0,
+      activeUsers: parseInt(s.active_users) || 0,
+      decisionsMade: parseInt(s.decisions_made) || 0,
+      recommendationsFollowed: parseInt(s.recommendations_followed) || 0,
+      followRate: parseFloat(followRate),
+      newUsers: parseInt(s.new_users) || 0,
+      period: daysAgo
+    });
+  } catch (error) {
+    console.error('Analytics summary error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

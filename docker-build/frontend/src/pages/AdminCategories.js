@@ -282,6 +282,7 @@ function AdminCategories({ setIsAuthenticated }) {
           <Link to="/admin/categories" className="nav-link active">Categories</Link>
           <Link to="/admin/api-usage" className="nav-link">API Usage</Link>
           <Link to="/admin/recommendations" className="nav-link">Recommendations</Link>
+          <Link to="/admin/analytics" className="nav-link">Analytics</Link>
           <Link to="/admin/email-templates" className="nav-link">Email Templates</Link>
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>
