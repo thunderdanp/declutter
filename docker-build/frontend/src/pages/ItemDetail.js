@@ -42,11 +42,11 @@ function ItemDetail({ setIsAuthenticated }) {
         const data = await response.json();
         setItem(data.item);
       } else {
-        navigate('/my_items');
+        navigate('/my-items');
       }
     } catch (error) {
       console.error('Error fetching item:', error);
-      navigate('/my_items');
+      navigate('/my-items');
     } finally {
       setLoading(false);
     }
@@ -87,7 +87,7 @@ function ItemDetail({ setIsAuthenticated }) {
       });
 
       if (response.ok) {
-        navigate('/my_items');
+        navigate('/my-items');
       } else {
         alert('Error deleting item');
       }
@@ -212,7 +212,7 @@ function ItemDetail({ setIsAuthenticated }) {
           <Link to="/dashboard" className="nav-link">Dashboard</Link>
           <Link to="/profile" className="nav-link">Profile</Link>
           <Link to="/evaluate" className="nav-link">Evaluate Item</Link>
-          <Link to="/my_items" className="nav-link">My Items</Link>
+          <Link to="/my-items" className="nav-link">My Items</Link>
           <Link to="/household" className="nav-link">Household</Link>
           <Link to="/settings" className="nav-link">Settings</Link>
           {user?.isAdmin && <Link to="/admin" className="nav-link nav-admin">Admin</Link>}
@@ -225,7 +225,7 @@ function ItemDetail({ setIsAuthenticated }) {
 
       <div className="container">
         <div className="back-link">
-          <Link to="/my_items">← Back to My Items</Link>
+          <Link to="/my-items">← Back to My Items</Link>
         </div>
 
         <div className="detail-header">
