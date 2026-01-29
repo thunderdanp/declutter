@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
     last_name VARCHAR(100),
     is_admin BOOLEAN DEFAULT FALSE,
     is_approved BOOLEAN DEFAULT TRUE,
+    anthropic_api_key TEXT,
+    image_analysis_enabled BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -91,6 +93,8 @@ CREATE TABLE IF NOT EXISTS email_templates (
     body TEXT NOT NULL,
     description VARCHAR(500),
     is_system BOOLEAN DEFAULT FALSE,
+    trigger_event VARCHAR(50),
+    is_enabled BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
