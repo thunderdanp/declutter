@@ -18,9 +18,15 @@ function AdminSettings({ setIsAuthenticated }) {
     hasDbKey: false,
     dbKeyPreview: null,
     hasEnvKey: false,
-    activeSource: 'none'
+    activeSource: 'none',
+    systemProvider: 'anthropic',
+    anthropic: { hasDbKey: false, dbKeyPreview: null, hasEnvKey: false },
+    openai: { hasDbKey: false, dbKeyPreview: null, hasEnvKey: false },
+    google: { hasDbKey: false, dbKeyPreview: null, hasEnvKey: false },
+    ollama: { baseUrl: 'http://localhost:11434' },
   });
-  const [newApiKey, setNewApiKey] = useState('');
+  const [providerKeys, setProviderKeys] = useState({ anthropic: '', openai: '', google: '' });
+  const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
@@ -90,14 +96,16 @@ function AdminSettings({ setIsAuthenticated }) {
       if (response.ok) {
         const data = await response.json();
         setApiKeyStatus(data);
+        setOllamaUrl(data.ollama?.baseUrl || 'http://localhost:11434');
       }
     } catch (error) {
       console.error('Error fetching API key status:', error);
     }
   };
 
-  const handleSaveApiKey = async () => {
-    if (!newApiKey.trim()) {
+  const handleSaveProviderKey = async (provider) => {
+    const key = providerKeys[provider];
+    if (!key || !key.trim()) {
       setApiKeyMessage('Please enter an API key');
       return;
     }
@@ -113,27 +121,27 @@ function AdminSettings({ setIsAuthenticated }) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ api_key: newApiKey })
+        body: JSON.stringify({ api_key: key, provider })
       });
 
       if (response.ok) {
-        setApiKeyMessage('API key saved successfully!');
-        setNewApiKey('');
+        setApiKeyMessage(`${provider} API key saved!`);
+        setProviderKeys(prev => ({ ...prev, [provider]: '' }));
         fetchApiKeyStatus();
         setTimeout(() => setApiKeyMessage(''), 3000);
       } else {
-        setApiKeyMessage('Failed to save API key');
+        setApiKeyMessage(`Failed to save ${provider} API key`);
       }
     } catch (error) {
       console.error('Error saving API key:', error);
-      setApiKeyMessage('Failed to save API key');
+      setApiKeyMessage(`Failed to save ${provider} API key`);
     } finally {
       setSavingApiKey(false);
     }
   };
 
-  const handleClearApiKey = async () => {
-    if (!window.confirm('Remove the API key from database? Will fall back to environment variable if set.')) return;
+  const handleClearProviderKey = async (provider) => {
+    if (!window.confirm(`Remove the ${provider} API key from database?`)) return;
 
     setSavingApiKey(true);
     setApiKeyMessage('');
@@ -146,19 +154,79 @@ function AdminSettings({ setIsAuthenticated }) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ clear_key: true })
+        body: JSON.stringify({ clear_key: true, provider })
       });
 
       if (response.ok) {
-        setApiKeyMessage('API key removed');
+        setApiKeyMessage(`${provider} API key removed`);
         fetchApiKeyStatus();
         setTimeout(() => setApiKeyMessage(''), 3000);
       } else {
-        setApiKeyMessage('Failed to remove API key');
+        setApiKeyMessage(`Failed to remove ${provider} API key`);
       }
     } catch (error) {
       console.error('Error removing API key:', error);
-      setApiKeyMessage('Failed to remove API key');
+      setApiKeyMessage(`Failed to remove ${provider} API key`);
+    } finally {
+      setSavingApiKey(false);
+    }
+  };
+
+  const handleSystemProviderChange = async (newProvider) => {
+    setSavingApiKey(true);
+    setApiKeyMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/api-key', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ system_provider: newProvider })
+      });
+
+      if (response.ok) {
+        setApiKeyMessage('System default provider updated!');
+        fetchApiKeyStatus();
+        setTimeout(() => setApiKeyMessage(''), 3000);
+      } else {
+        setApiKeyMessage('Failed to update system provider');
+      }
+    } catch (error) {
+      console.error('Error updating system provider:', error);
+      setApiKeyMessage('Failed to update system provider');
+    } finally {
+      setSavingApiKey(false);
+    }
+  };
+
+  const handleSaveOllamaUrl = async () => {
+    setSavingApiKey(true);
+    setApiKeyMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/api-key', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ollama_base_url: ollamaUrl })
+      });
+
+      if (response.ok) {
+        setApiKeyMessage('Ollama base URL saved!');
+        fetchApiKeyStatus();
+        setTimeout(() => setApiKeyMessage(''), 3000);
+      } else {
+        setApiKeyMessage('Failed to save Ollama URL');
+      }
+    } catch (error) {
+      console.error('Error saving Ollama URL:', error);
+      setApiKeyMessage('Failed to save Ollama URL');
     } finally {
       setSavingApiKey(false);
     }
@@ -433,72 +501,159 @@ function AdminSettings({ setIsAuthenticated }) {
             </div>
 
             <div className="settings-section">
-              <h2 className="settings-section-title">Anthropic API Key</h2>
+              <h2 className="settings-section-title">AI Provider Configuration</h2>
               <p className="form-help" style={{ marginBottom: '1.5rem' }}>
-                Configure the system API key for Claude image analysis. Database setting takes priority over environment variable.
+                Configure AI providers for image analysis. Users can choose a provider, or fall back to the system default.
               </p>
 
-              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
-                <div style={{ marginBottom: '0.5rem' }}>
-                  <strong>Current Status:</strong>{' '}
-                  {apiKeyStatus.activeSource === 'database' && (
-                    <span className="status-badge status-approved">Using Database Key ({apiKeyStatus.dbKeyPreview})</span>
-                  )}
-                  {apiKeyStatus.activeSource === 'environment' && (
-                    <span className="status-badge status-info">Using Environment Variable ({apiKeyStatus.envKeyPreview})</span>
-                  )}
-                  {apiKeyStatus.activeSource === 'none' && (
-                    <span className="status-badge status-pending">No API Key Configured</span>
-                  )}
-                </div>
-                {apiKeyStatus.hasEnvKey && apiKeyStatus.hasDbKey && (
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
-                    Environment variable is set but database key takes priority.
-                  </p>
-                )}
+              <div className="form-group">
+                <label htmlFor="system_provider">System Default Provider</label>
+                <select
+                  id="system_provider"
+                  className="form-control"
+                  value={apiKeyStatus.systemProvider || 'anthropic'}
+                  onChange={(e) => handleSystemProviderChange(e.target.value)}
+                  disabled={savingApiKey}
+                >
+                  <option value="anthropic">Anthropic Claude</option>
+                  <option value="openai">OpenAI GPT-4o</option>
+                  <option value="google">Google Gemini</option>
+                  <option value="ollama">Ollama (Local)</option>
+                </select>
+                <p className="form-help">The default provider when users haven't chosen one.</p>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="api_key">
-                  {apiKeyStatus.hasDbKey ? 'Update API Key' : 'Set API Key'}
-                </label>
+              {/* Anthropic */}
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <strong>Anthropic Claude</strong>
+                  {apiKeyStatus.anthropic?.hasDbKey ? (
+                    <span className="status-badge status-approved">Configured ({apiKeyStatus.anthropic.dbKeyPreview})</span>
+                  ) : apiKeyStatus.anthropic?.hasEnvKey ? (
+                    <span className="status-badge status-info">Using Env Variable</span>
+                  ) : (
+                    <span className="status-badge status-pending">Not Configured</span>
+                  )}
+                </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <input
                     type="password"
-                    id="api_key"
                     className="form-control"
                     placeholder="sk-ant-..."
-                    value={newApiKey}
-                    onChange={(e) => setNewApiKey(e.target.value)}
+                    value={providerKeys.anthropic}
+                    onChange={(e) => setProviderKeys(prev => ({ ...prev, anthropic: e.target.value }))}
                     style={{ flex: 1 }}
                   />
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleSaveApiKey}
-                    disabled={savingApiKey || !newApiKey.trim()}
-                  >
-                    {savingApiKey ? 'Saving...' : 'Save'}
+                  <button className="btn btn-primary" onClick={() => handleSaveProviderKey('anthropic')} disabled={savingApiKey || !providerKeys.anthropic.trim()}>
+                    Save
                   </button>
-                  {apiKeyStatus.hasDbKey && (
-                    <button
-                      className="btn btn-secondary"
-                      onClick={handleClearApiKey}
-                      disabled={savingApiKey}
-                    >
-                      Remove
+                  {apiKeyStatus.anthropic?.hasDbKey && (
+                    <button className="btn btn-secondary" onClick={() => handleClearProviderKey('anthropic')} disabled={savingApiKey}>
+                      Clear
                     </button>
                   )}
                 </div>
                 <p className="form-help">
-                  Get your API key from{' '}
-                  <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">
-                    console.anthropic.com
-                  </a>
+                  Get your key from{' '}
+                  <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>
                 </p>
               </div>
 
+              {/* OpenAI */}
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <strong>OpenAI GPT-4o</strong>
+                  {apiKeyStatus.openai?.hasDbKey ? (
+                    <span className="status-badge status-approved">Configured ({apiKeyStatus.openai.dbKeyPreview})</span>
+                  ) : apiKeyStatus.openai?.hasEnvKey ? (
+                    <span className="status-badge status-info">Using Env Variable</span>
+                  ) : (
+                    <span className="status-badge status-pending">Not Configured</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="password"
+                    className="form-control"
+                    placeholder="sk-..."
+                    value={providerKeys.openai}
+                    onChange={(e) => setProviderKeys(prev => ({ ...prev, openai: e.target.value }))}
+                    style={{ flex: 1 }}
+                  />
+                  <button className="btn btn-primary" onClick={() => handleSaveProviderKey('openai')} disabled={savingApiKey || !providerKeys.openai.trim()}>
+                    Save
+                  </button>
+                  {apiKeyStatus.openai?.hasDbKey && (
+                    <button className="btn btn-secondary" onClick={() => handleClearProviderKey('openai')} disabled={savingApiKey}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="form-help">
+                  Get your key from{' '}
+                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">platform.openai.com</a>
+                </p>
+              </div>
+
+              {/* Google Gemini */}
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                  <strong>Google Gemini</strong>
+                  {apiKeyStatus.google?.hasDbKey ? (
+                    <span className="status-badge status-approved">Configured ({apiKeyStatus.google.dbKeyPreview})</span>
+                  ) : apiKeyStatus.google?.hasEnvKey ? (
+                    <span className="status-badge status-info">Using Env Variable</span>
+                  ) : (
+                    <span className="status-badge status-pending">Not Configured</span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="password"
+                    className="form-control"
+                    placeholder="AIza..."
+                    value={providerKeys.google}
+                    onChange={(e) => setProviderKeys(prev => ({ ...prev, google: e.target.value }))}
+                    style={{ flex: 1 }}
+                  />
+                  <button className="btn btn-primary" onClick={() => handleSaveProviderKey('google')} disabled={savingApiKey || !providerKeys.google.trim()}>
+                    Save
+                  </button>
+                  {apiKeyStatus.google?.hasDbKey && (
+                    <button className="btn btn-secondary" onClick={() => handleClearProviderKey('google')} disabled={savingApiKey}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="form-help">
+                  Get your key from{' '}
+                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com</a>
+                </p>
+              </div>
+
+              {/* Ollama */}
+              <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--card-bg)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ marginBottom: '0.5rem' }}>
+                  <strong>Ollama (Local)</strong>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="http://localhost:11434"
+                    value={ollamaUrl}
+                    onChange={(e) => setOllamaUrl(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button className="btn btn-primary" onClick={handleSaveOllamaUrl} disabled={savingApiKey}>
+                    Save
+                  </button>
+                </div>
+                <p className="form-help">Base URL for your local Ollama instance. Requires llama3.2-vision model.</p>
+              </div>
+
               {apiKeyMessage && (
-                <div className={`message ${apiKeyMessage.includes('success') || apiKeyMessage.includes('removed') ? 'message-success' : 'message-error'}`}>
+                <div className={`message ${apiKeyMessage.includes('saved') || apiKeyMessage.includes('removed') || apiKeyMessage.includes('updated') ? 'message-success' : 'message-error'}`}>
                   {apiKeyMessage}
                 </div>
               )}

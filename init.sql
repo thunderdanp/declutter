@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
     last_name VARCHAR(100),
     is_admin BOOLEAN DEFAULT FALSE,
     is_approved BOOLEAN DEFAULT TRUE,
+    llm_provider VARCHAR(50) DEFAULT 'anthropic',
+    llm_api_key TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -20,6 +22,14 @@ CREATE TABLE IF NOT EXISTS system_settings (
 
 -- Insert default settings
 INSERT INTO system_settings (setting_key, setting_value) VALUES ('registration_mode', 'automatic')
+ON CONFLICT (setting_key) DO NOTHING;
+
+-- LLM provider settings
+INSERT INTO system_settings (setting_key, setting_value) VALUES
+  ('llm_provider', 'anthropic'),
+  ('openai_api_key', ''),
+  ('google_api_key', ''),
+  ('ollama_base_url', 'http://localhost:11434')
 ON CONFLICT (setting_key) DO NOTHING;
 
 -- Personality profiles table

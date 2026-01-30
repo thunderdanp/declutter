@@ -101,7 +101,7 @@ function AdminUsers({ setIsAuthenticated }) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ anthropic_api_key: newApiKey })
+        body: JSON.stringify({ llm_api_key: newApiKey })
       });
 
       if (response.ok) {
@@ -276,7 +276,7 @@ function AdminUsers({ setIsAuthenticated }) {
                             type="password"
                             value={newApiKey}
                             onChange={(e) => setNewApiKey(e.target.value)}
-                            placeholder="sk-ant-..."
+                            placeholder="API key..."
                             style={{ width: '120px', fontSize: '0.85rem', padding: '0.25rem' }}
                           />
                           <button
