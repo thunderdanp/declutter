@@ -278,7 +278,7 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
 --   {{title}} - Announcement title
 --   {{content}} - Announcement content
 -- ============================================================================
-INSERT INTO email_templates (name, subject, body, description, is_system) VALUES
+INSERT INTO email_templates (name, subject, body, description, is_system, trigger_event) VALUES
 ('welcome', 'Welcome to Declutter Assistant!', 'Hello {{firstName}},
 
 Welcome to Declutter Assistant! We''re excited to help you organize and simplify your life.
@@ -291,7 +291,7 @@ Get started by:
 If you have any questions, feel free to reach out.
 
 Best regards,
-The Declutter Team', 'Sent to new users upon registration', true),
+The Declutter Team', 'Sent to new users upon registration', true, 'welcome'),
 ('password_reset', 'Reset Your Password', 'Hello {{firstName}},
 
 You requested to reset your password. Click the link below to set a new password:
@@ -303,13 +303,13 @@ This link will expire in 1 hour.
 If you didn''t request this, please ignore this email.
 
 Best regards,
-The Declutter Team', 'Sent when user requests password reset', true),
+The Declutter Team', 'Sent when user requests password reset', true, 'password_reset'),
 ('announcement', 'Announcement: {{title}}', 'Hello {{firstName}},
 
 {{content}}
 
 Best regards,
-The Declutter Team', 'Template for admin announcements', true),
+The Declutter Team', 'Template for admin announcements', true, 'announcement'),
 ('email_verification', 'Verify Your Email Address', 'Hello {{firstName}},
 
 Thank you for registering with Declutter Assistant! Please verify your email address by clicking the link below:
@@ -321,7 +321,7 @@ This link will expire in 24 hours.
 If you didn''t create an account, please ignore this email.
 
 Best regards,
-The Declutter Team', 'Sent when user registers to verify email address', true)
+The Declutter Team', 'Sent when user registers to verify email address', true, 'email_verification')
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================

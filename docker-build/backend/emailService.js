@@ -244,7 +244,7 @@ class EmailService {
       const errors = [];
 
       for (const user of users) {
-        const result = await this.sendTemplatedEmail('announcement', user.email, {
+        const result = await this.sendTriggeredEmail('announcement', user.email, {
           firstName: user.first_name || 'User',
           lastName: user.last_name || '',
           title: announcement.title,

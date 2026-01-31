@@ -450,7 +450,7 @@ app.post('/api/auth/register', registerLimiter, [
       const verificationLink = `${req.headers.origin || 'http://localhost:3000'}/verify-email/${verificationToken}`;
 
       try {
-        await emailService.sendTemplatedEmail('email_verification', user.email, {
+        await emailService.sendTriggeredEmail('email_verification', user.email, {
           firstName: user.first_name,
           verificationLink
         });
@@ -685,7 +685,7 @@ app.post('/api/auth/forgot-password', emailActionLimiter, [
     const resetLink = `${req.headers.origin || 'http://localhost:3000'}/reset-password/${token}`;
 
     try {
-      await emailService.sendTemplatedEmail('password_reset', user.email, {
+      await emailService.sendTriggeredEmail('password_reset', user.email, {
         firstName: user.first_name,
         resetLink
       });
@@ -876,7 +876,7 @@ app.post('/api/auth/resend-verification', emailActionLimiter, [
     const verificationLink = `${req.headers.origin || 'http://localhost:3000'}/verify-email/${verificationToken}`;
 
     try {
-      await emailService.sendTemplatedEmail('email_verification', user.email, {
+      await emailService.sendTriggeredEmail('email_verification', user.email, {
         firstName: user.first_name,
         verificationLink
       });
