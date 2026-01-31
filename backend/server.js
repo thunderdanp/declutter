@@ -56,6 +56,7 @@ const { Pool } = require('pg');
 const { body, validationResult } = require('express-validator');
 const llmProviders = require('./llmProviders');
 const EmailService = require('./emailService');
+const crypto = require('crypto');
 const { RecaptchaEnterpriseServiceClient } = require('@google-cloud/recaptcha-enterprise');
 
 let recaptchaClient = null;
@@ -145,6 +146,8 @@ const runMigrations = async () => {
         ('recaptcha_project_id', ''),
         ('recaptcha_score_threshold', '0.5')
       ON CONFLICT (setting_key) DO NOTHING;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(64);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP;
     `);
     console.log('LLM provider migrations applied successfully');
   } catch (err) {
@@ -476,6 +479,156 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Get user error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Forgot password - send reset email
+app.post('/api/auth/forgot-password', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { email } = req.body;
+
+  try {
+    const result = await pool.query('SELECT id, email, first_name FROM users WHERE email = $1', [email]);
+
+    if (result.rows.length === 0) {
+      // Don't reveal whether email exists
+      return res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+    }
+
+    const user = result.rows[0];
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query(
+      'UPDATE users SET reset_token = $1, reset_token_expires = $2 WHERE id = $3',
+      [token, expires, user.id]
+    );
+
+    const resetLink = `${req.headers.origin || 'http://localhost:3000'}/reset-password/${token}`;
+
+    try {
+      await emailService.sendTemplatedEmail('password_reset', user.email, {
+        firstName: user.first_name,
+        resetLink
+      });
+    } catch (emailErr) {
+      console.error('Failed to send password reset email:', emailErr);
+    }
+
+    await logActivity({
+      userId: user.id,
+      action: 'password_reset_requested',
+      actionType: 'USER',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { email: user.email },
+      req
+    });
+
+    res.json({ message: 'If an account with that email exists, a password reset link has been sent.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset password - consume token and set new password
+app.post('/api/auth/reset-password', [
+  body('token').trim().notEmpty(),
+  body('password').isLength({ min: 6 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { token, password } = req.body;
+
+  try {
+    const result = await pool.query(
+      'SELECT id, email FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()',
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    const user = result.rows[0];
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      'UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2',
+      [passwordHash, user.id]
+    );
+
+    await logActivity({
+      userId: user.id,
+      action: 'password_reset_completed',
+      actionType: 'USER',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { email: user.email },
+      req
+    });
+
+    res.json({ message: 'Password reset successful' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Change password - authenticated password change
+app.post('/api/auth/change-password', authenticateToken, [
+  body('currentPassword').notEmpty(),
+  body('newPassword').isLength({ min: 6 })
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { currentPassword, newPassword } = req.body;
+
+  try {
+    const result = await pool.query('SELECT id, email, password_hash FROM users WHERE id = $1', [req.user.userId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
+
+    if (!validPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [passwordHash, user.id]);
+
+    await logActivity({
+      userId: user.id,
+      action: 'password_changed',
+      actionType: 'USER',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { email: user.email },
+      req
+    });
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
