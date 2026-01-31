@@ -183,13 +183,14 @@ function AdminUsers({ setIsAuthenticated }) {
   });
 
   return (
-    <div className="dashboard-container">
-      <nav className="dashboard-nav">
+    <div className="admin-layout">
+      <nav className="admin-sidebar">
         <Link to="/dashboard" className="nav-brand">
-          <h2>Declutter Assistant - Admin</h2>
+          <h2>Declutter Assistant</h2>
         </Link>
-        <div className="nav-links">
-          <Link to="/admin" className="nav-link">Admin Dashboard</Link>
+        <div className="admin-label">Admin</div>
+        <div className="admin-sidebar-links">
+          <Link to="/admin" className="nav-link">Dashboard</Link>
           <Link to="/admin/users" className="nav-link active">Users</Link>
           <Link to="/admin/categories" className="nav-link">Categories</Link>
           <Link to="/admin/api-usage" className="nav-link">API Usage</Link>
@@ -200,6 +201,8 @@ function AdminUsers({ setIsAuthenticated }) {
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>
           <Link to="/dashboard" className="nav-link">User View</Link>
+        </div>
+        <div className="admin-sidebar-footer">
           <button onClick={toggleTheme} className="btn-theme-toggle" title={isDark ? 'Light mode' : 'Dark mode'}>
             {isDark ? '☀️' : '🌙'}
           </button>
@@ -207,6 +210,7 @@ function AdminUsers({ setIsAuthenticated }) {
         </div>
       </nav>
 
+      <div className="admin-main">
       <div className="container">
         <div className="page-header">
           <h1 className="page-title">User Management</h1>
@@ -355,6 +359,7 @@ function AdminUsers({ setIsAuthenticated }) {
             </table>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
