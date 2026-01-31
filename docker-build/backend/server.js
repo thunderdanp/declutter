@@ -148,6 +148,12 @@ const runMigrations = async () => {
       ON CONFLICT (setting_key) DO NOTHING;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(64);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR(64);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires TIMESTAMP;
+      INSERT INTO system_settings (setting_key, setting_value)
+        VALUES ('require_email_verification', 'false')
+        ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('LLM provider migrations applied successfully');
   } catch (err) {
@@ -345,6 +351,53 @@ app.post('/api/auth/register', [
 
     const user = result.rows[0];
 
+    // Check if email verification is required
+    const verificationSetting = await pool.query(
+      "SELECT setting_value FROM system_settings WHERE setting_key = 'require_email_verification'"
+    );
+    const requireVerification = verificationSetting.rows.length > 0 && verificationSetting.rows[0].setting_value === 'true';
+
+    if (requireVerification) {
+      // Generate verification token
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      await pool.query(
+        'UPDATE users SET verification_token = $1, verification_token_expires = $2 WHERE id = $3',
+        [verificationToken, tokenExpires, user.id]
+      );
+
+      const verificationLink = `${req.headers.origin || 'http://localhost:3000'}/verify-email/${verificationToken}`;
+
+      try {
+        await emailService.sendTemplatedEmail('email_verification', user.email, {
+          firstName: user.first_name,
+          verificationLink
+        });
+      } catch (emailErr) {
+        console.error('Failed to send verification email:', emailErr);
+      }
+
+      // Log registration
+      await logActivity({
+        userId: user.id,
+        action: 'register',
+        actionType: 'USER',
+        resourceType: 'user',
+        resourceId: user.id,
+        details: { email: user.email, requiresVerification: true },
+        req
+      });
+
+      return res.status(200).json({
+        message: 'Registration successful. Please check your email to verify your account.',
+        requiresVerification: true
+      });
+    }
+
+    // No verification required — mark as verified and return JWT
+    await pool.query('UPDATE users SET email_verified = TRUE WHERE id = $1', [user.id]);
+
     // Generate JWT
     const token = jwt.sign(
       { userId: user.id, email: user.email },
@@ -392,7 +445,7 @@ app.post('/api/auth/login', [
 
   try {
     const result = await pool.query(
-      'SELECT id, email, password_hash, first_name, last_name, is_admin FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, first_name, last_name, is_admin, email_verified FROM users WHERE email = $1',
       [email]
     );
 
@@ -423,6 +476,29 @@ app.post('/api/auth/login', [
         req
       });
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check email verification requirement
+    const verificationSetting = await pool.query(
+      "SELECT setting_value FROM system_settings WHERE setting_key = 'require_email_verification'"
+    );
+    const requireVerification = verificationSetting.rows.length > 0 && verificationSetting.rows[0].setting_value === 'true';
+
+    if (requireVerification && !user.email_verified) {
+      await logActivity({
+        userId: user.id,
+        action: 'login_failed',
+        actionType: 'SYSTEM',
+        resourceType: 'user',
+        resourceId: user.id,
+        details: { email, reason: 'email_not_verified' },
+        req
+      });
+      return res.status(403).json({
+        error: 'Please verify your email address before logging in.',
+        unverified: true,
+        email: user.email
+      });
     }
 
     const token = jwt.sign(
@@ -462,7 +538,7 @@ app.post('/api/auth/login', [
 app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, email, first_name, last_name FROM users WHERE id = $1',
+      'SELECT id, email, first_name, last_name, email_verified FROM users WHERE id = $1',
       [req.user.userId]
     );
 
@@ -475,7 +551,8 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       id: user.id,
       email: user.email,
       firstName: user.first_name,
-      lastName: user.last_name
+      lastName: user.last_name,
+      emailVerified: user.email_verified
     });
   } catch (error) {
     console.error('Get user error:', error);
@@ -629,6 +706,103 @@ app.post('/api/auth/change-password', authenticateToken, [
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
     console.error('Change password error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Verify email via token
+app.get('/api/auth/verify-email/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    const result = await pool.query(
+      'SELECT id, email FROM users WHERE verification_token = $1 AND verification_token_expires > NOW()',
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired verification link' });
+    }
+
+    const user = result.rows[0];
+
+    await pool.query(
+      'UPDATE users SET email_verified = TRUE, verification_token = NULL, verification_token_expires = NULL WHERE id = $1',
+      [user.id]
+    );
+
+    await logActivity({
+      userId: user.id,
+      action: 'email_verified',
+      actionType: 'USER',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { email: user.email },
+      req
+    });
+
+    res.json({ message: 'Email verified successfully. You can now log in.' });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Resend verification email
+app.post('/api/auth/resend-verification', [
+  body('email').isEmail().normalizeEmail()
+], async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { email } = req.body;
+
+  try {
+    const result = await pool.query(
+      'SELECT id, email, first_name, email_verified FROM users WHERE email = $1',
+      [email]
+    );
+
+    // Don't reveal whether email exists or is already verified
+    if (result.rows.length === 0 || result.rows[0].email_verified) {
+      return res.json({ message: 'If an account with that email exists and is unverified, a new verification link has been sent.' });
+    }
+
+    const user = result.rows[0];
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await pool.query(
+      'UPDATE users SET verification_token = $1, verification_token_expires = $2 WHERE id = $3',
+      [verificationToken, tokenExpires, user.id]
+    );
+
+    const verificationLink = `${req.headers.origin || 'http://localhost:3000'}/verify-email/${verificationToken}`;
+
+    try {
+      await emailService.sendTemplatedEmail('email_verification', user.email, {
+        firstName: user.first_name,
+        verificationLink
+      });
+    } catch (emailErr) {
+      console.error('Failed to send verification email:', emailErr);
+    }
+
+    await logActivity({
+      userId: user.id,
+      action: 'verification_email_resent',
+      actionType: 'USER',
+      resourceType: 'user',
+      resourceId: user.id,
+      details: { email: user.email },
+      req
+    });
+
+    res.json({ message: 'If an account with that email exists and is unverified, a new verification link has been sent.' });
+  } catch (error) {
+    console.error('Resend verification error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1424,7 +1598,7 @@ app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) =>
 app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT u.id, u.email, u.first_name, u.last_name, u.is_admin, u.is_approved, u.created_at,
+      SELECT u.id, u.email, u.first_name, u.last_name, u.is_admin, u.is_approved, u.email_verified, u.created_at,
              (u.llm_api_key IS NOT NULL OR u.anthropic_api_key IS NOT NULL) as has_api_key, u.image_analysis_enabled,
              COUNT(i.id) as item_count
       FROM users u
@@ -1597,6 +1771,57 @@ app.put('/api/admin/settings/registration_mode', authenticateToken, requireAdmin
     res.json({ message: 'Setting updated' });
   } catch (error) {
     console.error('Update setting error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update require_email_verification setting
+app.put('/api/admin/settings/require_email_verification', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { value } = req.body;
+    if (!['true', 'false'].includes(value)) {
+      return res.status(400).json({ error: 'Invalid value. Must be "true" or "false".' });
+    }
+
+    await pool.query(
+      'INSERT INTO system_settings (setting_key, setting_value) VALUES ($1, $2) ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP',
+      ['require_email_verification', value]
+    );
+    res.json({ message: 'Setting updated' });
+  } catch (error) {
+    console.error('Update email verification setting error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin: manually verify a user's email
+app.post('/api/admin/users/:id/verify-email', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const userResult = await pool.query('SELECT id, email FROM users WHERE id = $1', [id]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await pool.query(
+      'UPDATE users SET email_verified = TRUE, verification_token = NULL, verification_token_expires = NULL WHERE id = $1',
+      [id]
+    );
+
+    await logActivity({
+      userId: req.user.userId,
+      action: 'admin_email_verified',
+      actionType: 'ADMIN',
+      resourceType: 'user',
+      resourceId: parseInt(id),
+      details: { verifiedUserId: parseInt(id), verifiedEmail: userResult.rows[0].email },
+      req
+    });
+
+    res.json({ message: 'User email verified successfully' });
+  } catch (error) {
+    console.error('Admin verify email error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

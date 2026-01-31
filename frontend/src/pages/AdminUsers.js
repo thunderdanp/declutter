@@ -144,6 +144,29 @@ function AdminUsers({ setIsAuthenticated }) {
     }
   };
 
+  const handleVerifyEmail = async (userId) => {
+    if (!window.confirm('Manually verify this user\'s email?')) return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/admin/users/${userId}/verify-email`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        alert('User email verified successfully');
+        fetchUsers();
+      } else {
+        const data = await response.json();
+        alert(data.error || 'Failed to verify user email');
+      }
+    } catch (error) {
+      console.error('Error verifying user email:', error);
+      alert('Failed to verify user email');
+    }
+  };
+
   const handleToggleImageAnalysis = async (userId, currentValue) => {
     try {
       const token = localStorage.getItem('token');
@@ -334,19 +357,32 @@ function AdminUsers({ setIsAuthenticated }) {
                         ) : (
                           <span className="status-badge status-pending">Pending</span>
                         )}
+                        {user.email_verified ? (
+                          <span className="status-badge status-approved">Email Verified</span>
+                        ) : (
+                          <span className="status-badge status-pending">Email Unverified</span>
+                        )}
                       </div>
                     </td>
                     <td>
                       <div className="action-buttons">
                         {!user.is_approved && (
-                          <button 
+                          <button
                             className="btn-approve"
                             onClick={() => handleApprove(user.id)}
                           >
                             Approve
                           </button>
                         )}
-                        <button 
+                        {!user.email_verified && (
+                          <button
+                            className="btn-approve"
+                            onClick={() => handleVerifyEmail(user.id)}
+                          >
+                            Verify Email
+                          </button>
+                        )}
+                        <button
                           className="btn-delete"
                           onClick={() => handleDelete(user.id)}
                         >

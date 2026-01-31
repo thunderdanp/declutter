@@ -134,6 +134,10 @@ INSERT INTO system_settings (setting_key, setting_value) VALUES
   ('ollama_base_url', 'http://localhost:11434')
 ON CONFLICT (setting_key) DO NOTHING;
 
+-- Email verification setting
+INSERT INTO system_settings (setting_key, setting_value) VALUES ('require_email_verification', 'false')
+ON CONFLICT (setting_key) DO NOTHING;
+
 -- reCAPTCHA settings
 INSERT INTO system_settings (setting_key, setting_value) VALUES
   ('recaptcha_site_key', ''),
@@ -305,7 +309,19 @@ The Declutter Team', 'Sent when user requests password reset', true),
 {{content}}
 
 Best regards,
-The Declutter Team', 'Template for admin announcements', true)
+The Declutter Team', 'Template for admin announcements', true),
+('email_verification', 'Verify Your Email Address', 'Hello {{firstName}},
+
+Thank you for registering with Declutter Assistant! Please verify your email address by clicking the link below:
+
+{{verificationLink}}
+
+This link will expire in 24 hours.
+
+If you didn''t create an account, please ignore this email.
+
+Best regards,
+The Declutter Team', 'Sent when user registers to verify email address', true)
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================

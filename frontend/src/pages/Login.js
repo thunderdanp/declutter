@@ -7,11 +7,17 @@ function Login({ setIsAuthenticated }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [unverified, setUnverified] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [resending, setResending] = useState(false);
+  const [resendMessage, setResendMessage] = useState('');
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setUnverified(false);
+    setResendMessage('');
     setLoading(true);
 
     try {
@@ -30,6 +36,10 @@ function Login({ setIsAuthenticated }) {
         localStorage.setItem('user', JSON.stringify(data.user));
         setIsAuthenticated(true);
         navigate('/dashboard');
+      } else if (data.unverified) {
+        setUnverified(true);
+        setUnverifiedEmail(data.email);
+        setError(data.error);
       } else {
         setError(data.error || 'Login failed');
       }
@@ -37,6 +47,26 @@ function Login({ setIsAuthenticated }) {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResending(true);
+    setResendMessage('');
+
+    try {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: unverifiedEmail })
+      });
+
+      const data = await response.json();
+      setResendMessage(data.message || 'Verification email sent.');
+    } catch (err) {
+      setResendMessage('Failed to resend verification email. Please try again.');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -73,12 +103,32 @@ function Login({ setIsAuthenticated }) {
 
           {error && <div className="error-message">{error}</div>}
 
+          {unverified && (
+            <div style={{ marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary btn-block"
+                onClick={handleResendVerification}
+                disabled={resending}
+                style={{ marginBottom: '0.5rem' }}
+              >
+                {resending ? 'Sending...' : 'Resend Verification Email'}
+              </button>
+              {resendMessage && (
+                <div className="message message-success" style={{ fontSize: '0.9rem' }}>
+                  {resendMessage}
+                </div>
+              )}
+            </div>
+          )}
+
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
         <div className="auth-footer">
+          <p><Link to="/forgot-password">Forgot your password?</Link></p>
           <p>Don't have an account? <Link to="/register">Sign up</Link></p>
         </div>
       </div>
