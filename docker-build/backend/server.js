@@ -150,6 +150,7 @@ const runMigrations = async () => {
       ON CONFLICT (setting_key) DO NOTHING;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(64);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT TRUE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR(64);
       ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires TIMESTAMP;
