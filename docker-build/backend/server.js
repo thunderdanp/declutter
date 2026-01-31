@@ -50,6 +50,7 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs').promises;
 const { Pool } = require('pg');
@@ -105,6 +106,7 @@ async function createAssessment({ projectID, recaptchaKey, token, recaptchaActio
 }
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // Ensure uploads directory exists at runtime (important when volume is mounted)
@@ -210,6 +212,55 @@ const upload = multer({
   }
 });
 
+// Rate Limiters
+const generalLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  limit: 100,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  validate: { trustProxy: false },
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 7,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later.' },
+  validate: { trustProxy: false },
+});
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many registration attempts, please try again later.' },
+  validate: { trustProxy: false },
+});
+
+const emailActionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+  validate: { trustProxy: false },
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  limit: 15,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => req.user?.userId || req.ip,
+  message: { error: 'Too many analysis requests, please try again later.' },
+  validate: { trustProxy: false },
+});
+
+app.use('/api', generalLimiter);
+
 // JWT Authentication Middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -287,7 +338,7 @@ app.get('/api/config/recaptcha', async (req, res) => {
 // ============= AUTH ROUTES =============
 
 // Register
-app.post('/api/auth/register', [
+app.post('/api/auth/register', registerLimiter, [
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
   body('firstName').trim().notEmpty(),
@@ -461,7 +512,7 @@ app.post('/api/auth/register', [
 });
 
 // Login
-app.post('/api/auth/login', [
+app.post('/api/auth/login', loginLimiter, [
   body('email').isEmail().normalizeEmail(),
   body('password').notEmpty()
 ], async (req, res) => {
@@ -604,7 +655,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 });
 
 // Forgot password - send reset email
-app.post('/api/auth/forgot-password', [
+app.post('/api/auth/forgot-password', emailActionLimiter, [
   body('email').isEmail().normalizeEmail()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -660,7 +711,7 @@ app.post('/api/auth/forgot-password', [
 });
 
 // Reset password - consume token and set new password
-app.post('/api/auth/reset-password', [
+app.post('/api/auth/reset-password', emailActionLimiter, [
   body('token').trim().notEmpty(),
   body('password').isLength({ min: 6 })
 ], async (req, res) => {
@@ -754,7 +805,7 @@ app.post('/api/auth/change-password', authenticateToken, [
 });
 
 // Verify email via token
-app.get('/api/auth/verify-email/:token', async (req, res) => {
+app.get('/api/auth/verify-email/:token', emailActionLimiter, async (req, res) => {
   try {
     const { token } = req.params;
 
@@ -792,7 +843,7 @@ app.get('/api/auth/verify-email/:token', async (req, res) => {
 });
 
 // Resend verification email
-app.post('/api/auth/resend-verification', [
+app.post('/api/auth/resend-verification', emailActionLimiter, [
   body('email').isEmail().normalizeEmail()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -978,7 +1029,7 @@ const checkUsageLimits = async (userId) => {
 };
 
 // Analyze image with LLM provider
-app.post('/api/analyze-image', authenticateToken, upload.single('image'), async (req, res) => {
+app.post('/api/analyze-image', authenticateToken, aiLimiter, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No image file provided' });
   }
