@@ -11,8 +11,9 @@ echo "Building $IMAGE_NAME:$TAG for $PLATFORM..."
 
 docker buildx build \
   --platform "$PLATFORM" \
+  -f "$(dirname "$0")/Dockerfile" \
   -t "$IMAGE_NAME:$TAG" \
   --push \
-  .
+  "$(dirname "$0")/.."
 
 echo "Done! Pushed $IMAGE_NAME:$TAG"

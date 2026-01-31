@@ -55,7 +55,7 @@ RUN mkdir -p /var/lib/nginx/tmp /var/log/nginx /run/nginx && \
 EXPOSE 80
 
 # Copy startup script
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker-build/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
