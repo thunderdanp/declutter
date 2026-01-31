@@ -8,7 +8,9 @@ RUN npm install --production
 
 COPY backend/server.js ./
 COPY backend/emailService.js ./
+COPY backend/llmProviders.js ./
 COPY backend/init.sql ./
+COPY backend/migrations ./migrations
 
 # Frontend build stage
 FROM node:18-alpine AS frontend-build

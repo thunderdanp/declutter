@@ -1213,7 +1213,8 @@ app.put('/api/admin/users/:id/api-settings', authenticateToken, requireAdmin, as
     } else {
       const newKey = llm_api_key || anthropic_api_key;
       if (newKey !== undefined && newKey !== '') {
-        updates.push(`llm_api_key = $${paramCount}`);
+        updates.push(`llm_api_key = $${paramCount++}`);
+        params.push(newKey);
         updates.push(`anthropic_api_key = $${paramCount++}`);
         params.push(newKey);
       }
@@ -2351,7 +2352,8 @@ app.put('/api/user/api-settings', authenticateToken, async (req, res) => {
     } else {
       const newKey = llm_api_key || anthropic_api_key;
       if (newKey !== undefined && newKey !== '') {
-        updates.push(`llm_api_key = $${paramCount}`);
+        updates.push(`llm_api_key = $${paramCount++}`);
+        params.push(newKey);
         updates.push(`anthropic_api_key = $${paramCount++}`);
         params.push(newKey);
       }

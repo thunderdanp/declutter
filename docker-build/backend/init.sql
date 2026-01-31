@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS users (
     is_approved BOOLEAN DEFAULT TRUE,
     anthropic_api_key TEXT,
     image_analysis_enabled BOOLEAN DEFAULT TRUE,
+    llm_provider VARCHAR(50) DEFAULT 'anthropic',
+    llm_api_key TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -122,6 +124,14 @@ INSERT INTO system_settings (setting_key, setting_value) VALUES
     "financial": {"name": "Financial", "description": "Maximizes monetary value recovery", "multipliers": {"usage": 0.8, "sentimental": 0.5, "condition": 1.5, "value": 2, "replaceability": 0.8, "space": 0.8}}
   }
 }')
+ON CONFLICT (setting_key) DO NOTHING;
+
+-- LLM provider settings
+INSERT INTO system_settings (setting_key, setting_value) VALUES
+  ('llm_provider', 'anthropic'),
+  ('openai_api_key', ''),
+  ('google_api_key', ''),
+  ('ollama_base_url', 'http://localhost:11434')
 ON CONFLICT (setting_key) DO NOTHING;
 
 -- ============================================================================
@@ -387,6 +397,7 @@ CREATE TABLE IF NOT EXISTS api_usage_logs (
     success BOOLEAN DEFAULT TRUE,
     error_message TEXT,
     used_user_key BOOLEAN DEFAULT FALSE,
+    provider VARCHAR(50) DEFAULT 'anthropic',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

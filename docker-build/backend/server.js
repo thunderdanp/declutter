@@ -47,14 +47,14 @@
 
 const express = require('express');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const { Pool } = require('pg');
 const { body, validationResult } = require('express-validator');
-const Anthropic = require('@anthropic-ai/sdk');
+const llmProviders = require('./llmProviders');
 const EmailService = require('./emailService');
 
 const app = express();
@@ -76,12 +76,36 @@ const pool = new Pool({
 // Initialize email service
 const emailService = new EmailService(pool);
 
+// Run idempotent migrations for multi-LLM provider support
+const runMigrations = async () => {
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_provider VARCHAR(50) DEFAULT 'anthropic';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_api_key TEXT;
+      UPDATE users SET llm_api_key = anthropic_api_key, llm_provider = 'anthropic'
+        WHERE anthropic_api_key IS NOT NULL AND llm_api_key IS NULL;
+      ALTER TABLE api_usage_logs ADD COLUMN IF NOT EXISTS provider VARCHAR(50) DEFAULT 'anthropic';
+      INSERT INTO system_settings (setting_key, setting_value) VALUES
+        ('llm_provider', 'anthropic'),
+        ('openai_api_key', ''),
+        ('google_api_key', ''),
+        ('ollama_base_url', 'http://localhost:11434')
+      ON CONFLICT (setting_key) DO NOTHING;
+    `);
+    console.log('LLM provider migrations applied successfully');
+  } catch (err) {
+    // Tables may not exist yet on first run (init.sql handles that)
+    console.log('LLM provider migration skipped (tables may not exist yet):', err.message);
+  }
+};
+
 // Test database connection
 pool.query('SELECT NOW()', (err, res) => {
   if (err) {
     console.error('Database connection error:', err);
   } else {
     console.log('Database connected successfully');
+    runMigrations();
   }
 });
 
@@ -398,22 +422,19 @@ app.post('/api/profile', authenticateToken, async (req, res) => {
 
 // ============= IMAGE ANALYSIS ROUTE =============
 
-// Helper function to calculate estimated cost (Claude Sonnet pricing)
-const calculateApiCost = (inputTokens, outputTokens) => {
-  // Claude Sonnet 4 pricing: $3/M input, $15/M output
-  const inputCost = (inputTokens / 1000000) * 3;
-  const outputCost = (outputTokens / 1000000) * 15;
-  return inputCost + outputCost;
+// Helper function to calculate estimated cost (delegates to llmProviders)
+const calculateApiCost = (inputTokens, outputTokens, providerName = 'anthropic') => {
+  return llmProviders.calculateCost(providerName, inputTokens, outputTokens);
 };
 
 // Helper function to log API usage
-const logApiUsage = async (userId, endpoint, model, inputTokens, outputTokens, success, errorMessage = null, usedUserKey = false) => {
+const logApiUsage = async (userId, endpoint, model, inputTokens, outputTokens, success, errorMessage = null, usedUserKey = false, provider = 'anthropic') => {
   try {
-    const estimatedCost = calculateApiCost(inputTokens, outputTokens);
+    const estimatedCost = calculateApiCost(inputTokens, outputTokens, provider);
     await pool.query(
-      `INSERT INTO api_usage_logs (user_id, endpoint, model, input_tokens, output_tokens, estimated_cost, success, error_message, used_user_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [userId, endpoint, model, inputTokens, outputTokens, estimatedCost, success, errorMessage, usedUserKey]
+      `INSERT INTO api_usage_logs (user_id, endpoint, model, input_tokens, output_tokens, estimated_cost, success, error_message, used_user_key, provider)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [userId, endpoint, model, inputTokens, outputTokens, estimatedCost, success, errorMessage, usedUserKey, provider]
     );
   } catch (err) {
     console.error('Error logging API usage:', err);
@@ -473,23 +494,42 @@ const checkUsageLimits = async (userId) => {
   }
 };
 
-// Analyze image with Claude
+// Analyze image with LLM provider
 app.post('/api/analyze-image', authenticateToken, upload.single('image'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No image file provided' });
   }
 
-  const modelName = 'claude-sonnet-4-20250514';
   let usedUserKey = false;
+  let providerName = 'anthropic';
+  let modelName = '';
 
   try {
-    // Check if user has their own API key
+    // Get user's provider preference and keys
     const userResult = await pool.query(
-      'SELECT anthropic_api_key FROM users WHERE id = $1',
+      'SELECT llm_provider, llm_api_key, anthropic_api_key FROM users WHERE id = $1',
       [req.user.userId]
     );
-    const userApiKey = userResult.rows[0]?.anthropic_api_key;
+    const userRow = userResult.rows[0];
+    const userProvider = userRow?.llm_provider;
+    const userApiKey = userRow?.llm_api_key || userRow?.anthropic_api_key;
     usedUserKey = !!userApiKey;
+
+    // Determine which provider to use: user preference > system default
+    if (userProvider && llmProviders.getProvider(userProvider)) {
+      providerName = userProvider;
+    } else {
+      // Fall back to system default provider
+      const sysProv = await pool.query(
+        "SELECT setting_value FROM system_settings WHERE setting_key = 'llm_provider'"
+      );
+      if (sysProv.rows[0]?.setting_value && llmProviders.getProvider(sysProv.rows[0].setting_value)) {
+        providerName = sysProv.rows[0].setting_value;
+      }
+    }
+
+    const providerConfig = llmProviders.getProvider(providerName);
+    modelName = providerConfig.defaultModel;
 
     // If not using user's key, check system usage limits
     if (!usedUserKey) {
@@ -504,22 +544,45 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
       }
     }
 
-    // Get system API key (database takes priority over environment)
-    let systemApiKey = process.env.ANTHROPIC_API_KEY;
-    if (!userApiKey) {
-      const sysKeyResult = await pool.query(
-        "SELECT setting_value FROM system_settings WHERE setting_key = 'anthropic_api_key'"
-      );
-      if (sysKeyResult.rows[0]?.setting_value) {
-        systemApiKey = sysKeyResult.rows[0].setting_value;
+    // Resolve the API key or base URL for the chosen provider
+    let apiKeyOrUrl = userApiKey;
+
+    if (!apiKeyOrUrl) {
+      if (providerName === 'ollama') {
+        // Ollama uses a base URL, not an API key
+        const ollamaResult = await pool.query(
+          "SELECT setting_value FROM system_settings WHERE setting_key = 'ollama_base_url'"
+        );
+        apiKeyOrUrl = ollamaResult.rows[0]?.setting_value || 'http://localhost:11434';
+      } else {
+        // Try provider-specific system DB key, then env var
+        const envKeyMap = {
+          anthropic: 'ANTHROPIC_API_KEY',
+          openai: 'OPENAI_API_KEY',
+          google: 'GOOGLE_API_KEY',
+        };
+        const dbKeyMap = {
+          anthropic: 'anthropic_api_key',
+          openai: 'openai_api_key',
+          google: 'google_api_key',
+        };
+
+        // Database key takes priority
+        const sysKeyResult = await pool.query(
+          "SELECT setting_value FROM system_settings WHERE setting_key = $1",
+          [dbKeyMap[providerName]]
+        );
+        const dbKey = sysKeyResult.rows[0]?.setting_value;
+        const envKey = process.env[envKeyMap[providerName]];
+
+        apiKeyOrUrl = (dbKey && dbKey.trim()) ? dbKey : envKey;
       }
     }
 
-    const apiKey = userApiKey || systemApiKey;
-    if (!apiKey) {
+    if (!apiKeyOrUrl) {
       return res.status(400).json({
         error: 'No API key available',
-        message: 'Please add your Anthropic API key in settings or contact the administrator'
+        message: `Please add your ${providerConfig.name} API key in settings or contact the administrator`
       });
     }
 
@@ -532,61 +595,22 @@ app.post('/api/analyze-image', authenticateToken, upload.single('image'), async 
     // Read the uploaded image file
     const imageBuffer = await fs.readFile(req.file.path);
     const base64Image = imageBuffer.toString('base64');
-
-    // Determine the media type
     const mediaType = req.file.mimetype;
 
-    // Initialize Anthropic client
-    const anthropic = new Anthropic({
-      apiKey: apiKey
-    });
+    // Call the LLM provider
+    const result = await llmProviders.analyzeImage(providerName, apiKeyOrUrl, base64Image, mediaType, categoryList);
 
-    // Send to Claude for analysis
-    const message = await anthropic.messages.create({
-      model: modelName,
-      max_tokens: 1024,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mediaType,
-                data: base64Image,
-              },
-            },
-            {
-              type: 'text',
-              text: `Please analyze this image and identify what item or items are shown. Provide your response in the following JSON format only, with no additional text:
-
-{
-  "name": "A brief, clear name for the item (e.g., 'Vintage Record Player', 'Winter Coat', 'Kitchen Blender')",
-  "description": "A detailed description of the item including its appearance, condition, and any notable features (2-3 sentences)",
-  "category": "One of these categories: ${categoryList}",
-  "location": "Suggest the most likely room where this item is typically found or used. One of: bedroom, living-room, kitchen, bathroom, garage, attic, basement, closet, other"
-}
-
-Be specific and descriptive. If multiple items are visible, focus on the main/central item.`
-            }
-          ],
-        },
-      ],
-    });
+    const inputTokens = result.inputTokens;
+    const outputTokens = result.outputTokens;
+    modelName = result.model || modelName;
 
     // Log successful API usage
-    const inputTokens = message.usage?.input_tokens || 0;
-    const outputTokens = message.usage?.output_tokens || 0;
-    await logApiUsage(req.user.userId, '/api/analyze-image', modelName, inputTokens, outputTokens, true, null, usedUserKey);
+    await logApiUsage(req.user.userId, '/api/analyze-image', modelName, inputTokens, outputTokens, true, null, usedUserKey, providerName);
 
-    // Parse Claude's response
-    const responseText = message.content[0].text;
-
-    // Try to extract JSON from the response
+    // Parse the response
+    const responseText = result.text;
     let analysisResult;
     try {
-      // Check if the response is wrapped in code blocks
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         analysisResult = JSON.parse(jsonMatch[0]);
@@ -594,7 +618,7 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
         analysisResult = JSON.parse(responseText);
       }
     } catch (parseError) {
-      console.error('Error parsing Claude response:', parseError);
+      console.error('Error parsing AI response:', parseError);
       console.error('Response was:', responseText);
       return res.status(500).json({
         error: 'Could not parse AI response',
@@ -605,7 +629,6 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
     // Validate the category against database
     const validSlugs = categoriesResult.rows.map(c => c.slug.toLowerCase());
     if (!validSlugs.includes(analysisResult.category?.toLowerCase())) {
-      // Get default category slug
       const defaultResult = await pool.query('SELECT slug FROM categories WHERE is_default = true');
       analysisResult.category = defaultResult.rows.length > 0 ? defaultResult.rows[0].slug : 'other';
     }
@@ -620,7 +643,7 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
     console.error('Image analysis error:', error);
 
     // Log failed API usage
-    await logApiUsage(req.user.userId, '/api/analyze-image', modelName, 0, 0, false, error.message, usedUserKey);
+    await logApiUsage(req.user.userId, '/api/analyze-image', modelName, 0, 0, false, error.message, usedUserKey, providerName);
 
     if (error.status === 401) {
       return res.status(401).json({
@@ -635,6 +658,58 @@ Be specific and descriptive. If multiple items are visible, focus on the main/ce
       error: 'Error analyzing image',
       details: error.message
     });
+  }
+});
+
+// Get available LLM providers
+app.get('/api/llm-providers', authenticateToken, async (req, res) => {
+  try {
+    // Get system default provider
+    const sysProvResult = await pool.query(
+      "SELECT setting_value FROM system_settings WHERE setting_key = 'llm_provider'"
+    );
+    const systemProvider = sysProvResult.rows[0]?.setting_value || 'anthropic';
+
+    // Check which providers have system-level keys configured
+    const sysKeysResult = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('anthropic_api_key', 'openai_api_key', 'google_api_key', 'ollama_base_url')"
+    );
+    const sysKeys = {};
+    sysKeysResult.rows.forEach(row => {
+      sysKeys[row.setting_key] = row.setting_value;
+    });
+
+    const envKeyMap = {
+      anthropic: 'ANTHROPIC_API_KEY',
+      openai: 'OPENAI_API_KEY',
+      google: 'GOOGLE_API_KEY',
+    };
+    const dbKeyMap = {
+      anthropic: 'anthropic_api_key',
+      openai: 'openai_api_key',
+      google: 'google_api_key',
+    };
+
+    const providers = llmProviders.getAvailableProviders().map(p => {
+      let systemConfigured = false;
+      if (p.id === 'ollama') {
+        systemConfigured = !!(sysKeys['ollama_base_url'] && sysKeys['ollama_base_url'].trim());
+      } else {
+        const dbVal = sysKeys[dbKeyMap[p.id]];
+        const envVal = process.env[envKeyMap[p.id]];
+        systemConfigured = !!(dbVal && dbVal.trim()) || !!envVal;
+      }
+      return {
+        ...p,
+        systemConfigured,
+        isSystemDefault: p.id === systemProvider,
+      };
+    });
+
+    res.json({ providers });
+  } catch (error) {
+    console.error('Get LLM providers error:', error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -1084,7 +1159,7 @@ app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) =>
   try {
     const result = await pool.query(`
       SELECT u.id, u.email, u.first_name, u.last_name, u.is_admin, u.is_approved, u.created_at,
-             u.anthropic_api_key IS NOT NULL as has_api_key, u.image_analysis_enabled,
+             (u.llm_api_key IS NOT NULL OR u.anthropic_api_key IS NOT NULL) as has_api_key, u.image_analysis_enabled,
              COUNT(i.id) as item_count
       FROM users u
       LEFT JOIN items i ON u.id = i.user_id
@@ -1126,17 +1201,23 @@ app.patch('/api/admin/users/:id/approve', authenticateToken, requireAdmin, async
 app.put('/api/admin/users/:id/api-settings', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { anthropic_api_key, image_analysis_enabled, clear_api_key } = req.body;
+    const { anthropic_api_key, llm_api_key, image_analysis_enabled, clear_api_key } = req.body;
 
     const updates = [];
     const params = [];
     let paramCount = 1;
 
     if (clear_api_key) {
+      updates.push(`llm_api_key = NULL`);
       updates.push(`anthropic_api_key = NULL`);
-    } else if (anthropic_api_key !== undefined && anthropic_api_key !== '') {
-      updates.push(`anthropic_api_key = $${paramCount++}`);
-      params.push(anthropic_api_key);
+    } else {
+      const newKey = llm_api_key || anthropic_api_key;
+      if (newKey !== undefined && newKey !== '') {
+        updates.push(`llm_api_key = $${paramCount++}`);
+        params.push(newKey);
+        updates.push(`anthropic_api_key = $${paramCount++}`);
+        params.push(newKey);
+      }
     }
 
     if (image_analysis_enabled !== undefined) {
@@ -1149,7 +1230,7 @@ app.put('/api/admin/users/:id/api-settings', authenticateToken, requireAdmin, as
     }
 
     params.push(id);
-    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, anthropic_api_key, image_analysis_enabled`;
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, llm_api_key, anthropic_api_key, image_analysis_enabled`;
 
     const result = await pool.query(query, params);
 
@@ -1169,7 +1250,7 @@ app.put('/api/admin/users/:id/api-settings', authenticateToken, requireAdmin, as
       details: {
         targetUserId: parseInt(id),
         apiKeyCleared: !!clear_api_key,
-        apiKeySet: !!anthropic_api_key && !clear_api_key,
+        apiKeySet: !!(llm_api_key || anthropic_api_key) && !clear_api_key,
         imageAnalysisEnabled: image_analysis_enabled
       },
       req
@@ -1177,7 +1258,7 @@ app.put('/api/admin/users/:id/api-settings', authenticateToken, requireAdmin, as
 
     res.json({
       id: user.id,
-      hasApiKey: !!user.anthropic_api_key,
+      hasApiKey: !!(user.llm_api_key || user.anthropic_api_key),
       imageAnalysisEnabled: user.image_analysis_enabled !== false
     });
   } catch (error) {
@@ -1322,21 +1403,47 @@ app.post('/api/admin/smtp/test', authenticateToken, requireAdmin, async (req, re
 
 // ============= ADMIN API KEY SETTINGS =============
 
-// Get system API key status
+// Get system API key status (multi-provider)
 app.get('/api/admin/api-key', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT setting_value FROM system_settings WHERE setting_key = 'anthropic_api_key'"
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('anthropic_api_key', 'openai_api_key', 'google_api_key', 'ollama_base_url', 'llm_provider')"
     );
-    const dbKey = result.rows[0]?.setting_value;
+    const settings = {};
+    result.rows.forEach(row => { settings[row.setting_key] = row.setting_value; });
+
+    const dbKey = settings.anthropic_api_key;
     const envKey = process.env.ANTHROPIC_API_KEY;
 
+    const keyPreview = (key) => key ? `...${key.slice(-4)}` : null;
+
     res.json({
-      hasDbKey: !!dbKey,
-      dbKeyPreview: dbKey ? `sk-...${dbKey.slice(-4)}` : null,
+      // Backward-compatible fields
+      hasDbKey: !!(dbKey && dbKey.trim()),
+      dbKeyPreview: dbKey ? keyPreview(dbKey) : null,
       hasEnvKey: !!envKey,
-      envKeyPreview: envKey ? `sk-...${envKey.slice(-4)}` : null,
-      activeSource: dbKey ? 'database' : (envKey ? 'environment' : 'none')
+      envKeyPreview: envKey ? keyPreview(envKey) : null,
+      activeSource: (dbKey && dbKey.trim()) ? 'database' : (envKey ? 'environment' : 'none'),
+      // Multi-provider fields
+      systemProvider: settings.llm_provider || 'anthropic',
+      anthropic: {
+        hasDbKey: !!(dbKey && dbKey.trim()),
+        dbKeyPreview: (dbKey && dbKey.trim()) ? keyPreview(dbKey) : null,
+        hasEnvKey: !!envKey,
+      },
+      openai: {
+        hasDbKey: !!(settings.openai_api_key && settings.openai_api_key.trim()),
+        dbKeyPreview: (settings.openai_api_key && settings.openai_api_key.trim()) ? keyPreview(settings.openai_api_key) : null,
+        hasEnvKey: !!process.env.OPENAI_API_KEY,
+      },
+      google: {
+        hasDbKey: !!(settings.google_api_key && settings.google_api_key.trim()),
+        dbKeyPreview: (settings.google_api_key && settings.google_api_key.trim()) ? keyPreview(settings.google_api_key) : null,
+        hasEnvKey: !!process.env.GOOGLE_API_KEY,
+      },
+      ollama: {
+        baseUrl: settings.ollama_base_url || 'http://localhost:11434',
+      },
     });
   } catch (error) {
     console.error('Get API key error:', error);
@@ -1344,40 +1451,67 @@ app.get('/api/admin/api-key', authenticateToken, requireAdmin, async (req, res) 
   }
 });
 
-// Update system API key
+// Update system API key (multi-provider)
 app.put('/api/admin/api-key', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { api_key, clear_key } = req.body;
+    const { api_key, clear_key, provider, system_provider, ollama_base_url } = req.body;
 
-    if (clear_key) {
+    // Update system default provider
+    if (system_provider && llmProviders.getProvider(system_provider)) {
+      await pool.query(`
+        INSERT INTO system_settings (setting_key, setting_value)
+        VALUES ('llm_provider', $1)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
+      `, [system_provider]);
+    }
+
+    // Update Ollama base URL
+    if (ollama_base_url !== undefined) {
+      await pool.query(`
+        INSERT INTO system_settings (setting_key, setting_value)
+        VALUES ('ollama_base_url', $1)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
+      `, [ollama_base_url]);
+    }
+
+    // Determine which provider's key is being updated
+    const targetProvider = provider || 'anthropic';
+    const dbKeyMap = {
+      anthropic: 'anthropic_api_key',
+      openai: 'openai_api_key',
+      google: 'google_api_key',
+    };
+    const settingKey = dbKeyMap[targetProvider];
+
+    if (clear_key && settingKey) {
       await pool.query(
-        "DELETE FROM system_settings WHERE setting_key = 'anthropic_api_key'"
+        "UPDATE system_settings SET setting_value = '', updated_at = CURRENT_TIMESTAMP WHERE setting_key = $1",
+        [settingKey]
       );
-      const envKey = process.env.ANTHROPIC_API_KEY;
       return res.json({
-        message: 'API key removed from database',
+        message: `${targetProvider} API key removed`,
+        provider: targetProvider,
         hasDbKey: false,
-        hasEnvKey: !!envKey,
-        activeSource: envKey ? 'environment' : 'none'
       });
     }
 
-    if (!api_key) {
-      return res.status(400).json({ error: 'API key is required' });
+    if (api_key && settingKey) {
+      await pool.query(`
+        INSERT INTO system_settings (setting_key, setting_value)
+        VALUES ($1, $2)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $2, updated_at = CURRENT_TIMESTAMP
+      `, [settingKey, api_key]);
+
+      return res.json({
+        message: `${targetProvider} API key saved successfully`,
+        provider: targetProvider,
+        hasDbKey: true,
+        dbKeyPreview: `...${api_key.slice(-4)}`,
+      });
     }
 
-    await pool.query(`
-      INSERT INTO system_settings (setting_key, setting_value)
-      VALUES ('anthropic_api_key', $1)
-      ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
-    `, [api_key]);
-
-    res.json({
-      message: 'API key saved successfully',
-      hasDbKey: true,
-      dbKeyPreview: `sk-...${api_key.slice(-4)}`,
-      activeSource: 'database'
-    });
+    // If only system_provider or ollama_base_url was changed
+    res.json({ message: 'Settings saved successfully' });
   } catch (error) {
     console.error('Update API key error:', error);
     res.status(500).json({ error: 'Server error' });
@@ -2181,7 +2315,7 @@ app.put('/api/notification-preferences', authenticateToken, async (req, res) => 
 app.get('/api/user/api-settings', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT anthropic_api_key, image_analysis_enabled FROM users WHERE id = $1',
+      'SELECT anthropic_api_key, image_analysis_enabled, llm_provider, llm_api_key FROM users WHERE id = $1',
       [req.user.userId]
     );
 
@@ -2190,10 +2324,12 @@ app.get('/api/user/api-settings', authenticateToken, async (req, res) => {
     }
 
     const user = result.rows[0];
+    const activeKey = user.llm_api_key || user.anthropic_api_key;
     res.json({
-      hasApiKey: !!user.anthropic_api_key,
-      apiKeyPreview: user.anthropic_api_key ? `sk-...${user.anthropic_api_key.slice(-4)}` : null,
-      imageAnalysisEnabled: user.image_analysis_enabled !== false
+      hasApiKey: !!activeKey,
+      apiKeyPreview: activeKey ? `...${activeKey.slice(-4)}` : null,
+      imageAnalysisEnabled: user.image_analysis_enabled !== false,
+      llmProvider: user.llm_provider || 'anthropic',
     });
   } catch (error) {
     console.error('Get API settings error:', error);
@@ -2204,17 +2340,28 @@ app.get('/api/user/api-settings', authenticateToken, async (req, res) => {
 // Update user's API settings
 app.put('/api/user/api-settings', authenticateToken, async (req, res) => {
   try {
-    const { anthropic_api_key, image_analysis_enabled, clear_api_key } = req.body;
+    const { anthropic_api_key, llm_api_key, image_analysis_enabled, clear_api_key, llm_provider } = req.body;
 
     const updates = [];
     const params = [];
     let paramCount = 1;
 
     if (clear_api_key) {
+      updates.push(`llm_api_key = NULL`);
       updates.push(`anthropic_api_key = NULL`);
-    } else if (anthropic_api_key !== undefined && anthropic_api_key !== '') {
-      updates.push(`anthropic_api_key = $${paramCount++}`);
-      params.push(anthropic_api_key);
+    } else {
+      const newKey = llm_api_key || anthropic_api_key;
+      if (newKey !== undefined && newKey !== '') {
+        updates.push(`llm_api_key = $${paramCount++}`);
+        params.push(newKey);
+        updates.push(`anthropic_api_key = $${paramCount++}`);
+        params.push(newKey);
+      }
+    }
+
+    if (llm_provider !== undefined && llmProviders.getProvider(llm_provider)) {
+      updates.push(`llm_provider = $${paramCount++}`);
+      params.push(llm_provider);
     }
 
     if (image_analysis_enabled !== undefined) {
@@ -2227,7 +2374,7 @@ app.put('/api/user/api-settings', authenticateToken, async (req, res) => {
     }
 
     params.push(req.user.userId);
-    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING anthropic_api_key, image_analysis_enabled`;
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING llm_api_key, anthropic_api_key, image_analysis_enabled, llm_provider`;
 
     const result = await pool.query(query, params);
 
@@ -2236,10 +2383,12 @@ app.put('/api/user/api-settings', authenticateToken, async (req, res) => {
     }
 
     const user = result.rows[0];
+    const activeKey = user.llm_api_key || user.anthropic_api_key;
     res.json({
-      hasApiKey: !!user.anthropic_api_key,
-      apiKeyPreview: user.anthropic_api_key ? `sk-...${user.anthropic_api_key.slice(-4)}` : null,
-      imageAnalysisEnabled: user.image_analysis_enabled !== false
+      hasApiKey: !!activeKey,
+      apiKeyPreview: activeKey ? `...${activeKey.slice(-4)}` : null,
+      imageAnalysisEnabled: user.image_analysis_enabled !== false,
+      llmProvider: user.llm_provider || 'anthropic',
     });
   } catch (error) {
     console.error('Update API settings error:', error);

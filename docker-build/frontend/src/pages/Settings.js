@@ -22,17 +22,21 @@ function Settings({ setIsAuthenticated }) {
   const [apiSettings, setApiSettings] = useState({
     hasApiKey: false,
     apiKeyPreview: null,
-    imageAnalysisEnabled: true
+    imageAnalysisEnabled: true,
+    llmProvider: 'anthropic'
   });
   const [newApiKey, setNewApiKey] = useState('');
   const [savingApiSettings, setSavingApiSettings] = useState(false);
   const [apiMessage, setApiMessage] = useState('');
+  const [providers, setProviders] = useState([]);
+  const [selectedProvider, setSelectedProvider] = useState('anthropic');
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     fetchNotificationPreferences();
     fetchApiSettings();
+    fetchProviders();
   }, []);
 
   const fetchNotificationPreferences = async () => {
@@ -68,11 +72,29 @@ function Settings({ setIsAuthenticated }) {
         setApiSettings({
           hasApiKey: data.hasApiKey,
           apiKeyPreview: data.apiKeyPreview,
-          imageAnalysisEnabled: data.imageAnalysisEnabled
+          imageAnalysisEnabled: data.imageAnalysisEnabled,
+          llmProvider: data.llmProvider || 'anthropic'
         });
+        setSelectedProvider(data.llmProvider || 'anthropic');
       }
     } catch (error) {
       console.error('Error fetching API settings:', error);
+    }
+  };
+
+  const fetchProviders = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/llm-providers', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setProviders(data.providers || []);
+      }
+    } catch (error) {
+      console.error('Error fetching providers:', error);
     }
   };
 
@@ -111,6 +133,40 @@ function Settings({ setIsAuthenticated }) {
     }
   };
 
+  const handleProviderChange = async (newProvider) => {
+    setSelectedProvider(newProvider);
+    setSavingApiSettings(true);
+    setApiMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/user/api-settings', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ llm_provider: newProvider })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setApiSettings(prev => ({
+          ...prev,
+          llmProvider: data.llmProvider
+        }));
+        setApiMessage('Provider updated!');
+        setTimeout(() => setApiMessage(''), 3000);
+      } else {
+        setApiMessage('Failed to update provider');
+      }
+    } catch (err) {
+      setApiMessage('Network error. Please try again.');
+    } finally {
+      setSavingApiSettings(false);
+    }
+  };
+
   const handleSaveApiKey = async () => {
     if (!newApiKey.trim()) {
       setApiMessage('Please enter an API key');
@@ -129,7 +185,7 @@ function Settings({ setIsAuthenticated }) {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          anthropic_api_key: newApiKey
+          llm_api_key: newApiKey
         })
       });
 
@@ -398,7 +454,7 @@ function Settings({ setIsAuthenticated }) {
           <div className="card">
             <h2 className="section-heading">AI Image Analysis</h2>
             <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              Configure how image analysis works for your items. You can use your own Anthropic API key or use the system default (if available).
+              Configure how image analysis works for your items. Choose an AI provider and optionally use your own API key.
             </p>
 
             <div className="setting-item">
@@ -418,49 +474,88 @@ function Settings({ setIsAuthenticated }) {
             </div>
 
             <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-              <div className="setting-info" style={{ marginBottom: '1rem' }}>
-                <h3>Your Anthropic API Key</h3>
-                <p>
-                  {apiSettings.hasApiKey
-                    ? `Current key: ${apiSettings.apiKeyPreview}`
-                    : 'No API key configured. Using system default if available.'}
-                </p>
+              <div className="setting-info" style={{ marginBottom: '0.5rem' }}>
+                <h3>AI Provider</h3>
+                <p>Select which AI service to use for image analysis</p>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <input
-                  type="password"
-                  value={newApiKey}
-                  onChange={(e) => setNewApiKey(e.target.value)}
-                  placeholder="sk-ant-..."
-                  style={{ flex: 1, minWidth: '200px' }}
-                />
-                <button
-                  onClick={handleSaveApiKey}
-                  className="btn btn-primary"
-                  disabled={savingApiSettings || !newApiKey.trim()}
-                >
-                  {savingApiSettings ? 'Saving...' : 'Save Key'}
-                </button>
-                {apiSettings.hasApiKey && (
-                  <button
-                    onClick={handleClearApiKey}
-                    className="btn btn-secondary"
-                    disabled={savingApiSettings}
-                  >
-                    Remove Key
-                  </button>
-                )}
-              </div>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                Get your API key from{' '}
-                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">
-                  console.anthropic.com
-                </a>
-              </p>
+              <select
+                value={selectedProvider}
+                onChange={(e) => handleProviderChange(e.target.value)}
+                disabled={savingApiSettings}
+                style={{ padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-color)' }}
+              >
+                {providers.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.isSystemDefault ? ' (System Default)' : ''}{p.systemConfigured ? '' : ' - Not Configured'}
+                  </option>
+                ))}
+              </select>
             </div>
 
+            {(() => {
+              const currentProvider = providers.find(p => p.id === selectedProvider);
+              if (!currentProvider) return null;
+
+              if (selectedProvider === 'ollama') {
+                return (
+                  <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                    <div className="setting-info">
+                      <h3>Ollama (Local)</h3>
+                      <p>Ollama runs locally and is configured by the administrator. No API key needed.</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="setting-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div className="setting-info" style={{ marginBottom: '1rem' }}>
+                    <h3>Your {currentProvider.name} API Key</h3>
+                    <p>
+                      {apiSettings.hasApiKey
+                        ? `Current key: ${apiSettings.apiKeyPreview}`
+                        : 'No API key configured. Using system default if available.'}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <input
+                      type="password"
+                      value={newApiKey}
+                      onChange={(e) => setNewApiKey(e.target.value)}
+                      placeholder={currentProvider.keyPlaceholder || 'API key...'}
+                      style={{ flex: 1, minWidth: '200px' }}
+                    />
+                    <button
+                      onClick={handleSaveApiKey}
+                      className="btn btn-primary"
+                      disabled={savingApiSettings || !newApiKey.trim()}
+                    >
+                      {savingApiSettings ? 'Saving...' : 'Save Key'}
+                    </button>
+                    {apiSettings.hasApiKey && (
+                      <button
+                        onClick={handleClearApiKey}
+                        className="btn btn-secondary"
+                        disabled={savingApiSettings}
+                      >
+                        Remove Key
+                      </button>
+                    )}
+                  </div>
+                  {currentProvider.consoleUrl && (
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                      Get your API key from{' '}
+                      <a href={currentProvider.consoleUrl} target="_blank" rel="noopener noreferrer">
+                        {currentProvider.consoleUrl.replace(/^https?:\/\//, '').split('/')[0]}
+                      </a>
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             {apiMessage && (
-              <div className={`${apiMessage.includes('saved') || apiMessage.includes('updated') || apiMessage.includes('removed') ? 'success-message' : 'error-message'}`}>
+              <div className={`${apiMessage.includes('saved') || apiMessage.includes('updated') || apiMessage.includes('removed') || apiMessage.includes('Provider') ? 'success-message' : 'error-message'}`}>
                 {apiMessage}
               </div>
             )}
