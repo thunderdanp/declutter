@@ -1726,7 +1726,7 @@ app.patch('/api/admin/users/:id/approve', authenticateToken, requireAdmin, async
   try {
     const { id } = req.params;
     const result = await pool.query(
-      'UPDATE users SET is_approved = true WHERE id = $1 RETURNING email, first_name, last_name',
+      'UPDATE users SET is_approved = true, email_verified = true, verification_token = NULL, verification_token_expires = NULL WHERE id = $1 RETURNING email, first_name, last_name',
       [id]
     );
 
