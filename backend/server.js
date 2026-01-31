@@ -56,6 +56,52 @@ const { Pool } = require('pg');
 const { body, validationResult } = require('express-validator');
 const llmProviders = require('./llmProviders');
 const EmailService = require('./emailService');
+const { RecaptchaEnterpriseServiceClient } = require('@google-cloud/recaptcha-enterprise');
+
+let recaptchaClient = null;
+function getRecaptchaClient() {
+  if (!recaptchaClient) {
+    try {
+      recaptchaClient = new RecaptchaEnterpriseServiceClient();
+    } catch (err) {
+      console.error('Failed to initialize reCAPTCHA Enterprise client:', err.message);
+    }
+  }
+  return recaptchaClient;
+}
+
+async function createAssessment({ projectID, recaptchaKey, token, recaptchaAction }) {
+  const client = getRecaptchaClient();
+  if (!client) return null;
+
+  try {
+    const projectPath = client.projectPath(projectID);
+    const [response] = await client.createAssessment({
+      parent: projectPath,
+      assessment: {
+        event: {
+          token: token,
+          siteKey: recaptchaKey,
+        },
+      },
+    });
+
+    if (!response.tokenProperties.valid) {
+      console.error('reCAPTCHA token invalid:', response.tokenProperties.invalidReason);
+      return null;
+    }
+
+    if (response.tokenProperties.action !== recaptchaAction) {
+      console.error('reCAPTCHA action mismatch: expected', recaptchaAction, 'got', response.tokenProperties.action);
+      return null;
+    }
+
+    return response.riskAnalysis.score;
+  } catch (err) {
+    console.error('reCAPTCHA Enterprise createAssessment error:', err.message);
+    return null;
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -94,6 +140,10 @@ const runMigrations = async () => {
       INSERT INTO system_settings (setting_key, setting_value) VALUES
         ('recaptcha_site_key', ''),
         ('recaptcha_secret_key', '')
+      ON CONFLICT (setting_key) DO NOTHING;
+      INSERT INTO system_settings (setting_key, setting_value) VALUES
+        ('recaptcha_project_id', ''),
+        ('recaptcha_score_threshold', '0.5')
       ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('LLM provider migrations applied successfully');
@@ -205,14 +255,14 @@ const logActivity = async ({ userId, action, actionType, resourceType = null, re
 app.get('/api/config/recaptcha', async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_secret_key')"
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_project_id')"
     );
     const settings = {};
     result.rows.forEach(row => { settings[row.setting_key] = row.setting_value; });
 
     const siteKey = (settings.recaptcha_site_key && settings.recaptcha_site_key.trim()) || process.env.REACT_APP_RECAPTCHA_SITE_KEY || '';
-    const secretKey = (settings.recaptcha_secret_key && settings.recaptcha_secret_key.trim()) || process.env.RECAPTCHA_SECRET_KEY || '';
-    const enabled = !!(siteKey && secretKey);
+    const projectId = (settings.recaptcha_project_id && settings.recaptcha_project_id.trim()) || process.env.RECAPTCHA_PROJECT_ID || '';
+    const enabled = !!(siteKey && projectId && getRecaptchaClient());
 
     const response = { enabled };
     if (enabled) {
@@ -242,35 +292,36 @@ app.post('/api/auth/register', [
   const { email, password, firstName, lastName, recaptchaToken } = req.body;
 
   try {
-    // reCAPTCHA server-side verification
+    // reCAPTCHA Enterprise server-side verification
     const recaptchaResult = await pool.query(
-      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_secret_key')"
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_project_id', 'recaptcha_score_threshold')"
     );
     const recaptchaSettings = {};
     recaptchaResult.rows.forEach(row => { recaptchaSettings[row.setting_key] = row.setting_value; });
 
     const siteKey = (recaptchaSettings.recaptcha_site_key && recaptchaSettings.recaptcha_site_key.trim()) || process.env.REACT_APP_RECAPTCHA_SITE_KEY || '';
-    const secretKey = (recaptchaSettings.recaptcha_secret_key && recaptchaSettings.recaptcha_secret_key.trim()) || process.env.RECAPTCHA_SECRET_KEY || '';
+    const projectId = (recaptchaSettings.recaptcha_project_id && recaptchaSettings.recaptcha_project_id.trim()) || process.env.RECAPTCHA_PROJECT_ID || '';
+    const scoreThreshold = parseFloat(recaptchaSettings.recaptcha_score_threshold) || 0.5;
+    const client = getRecaptchaClient();
 
-    if (siteKey && secretKey) {
+    if (siteKey && projectId && client) {
       if (!recaptchaToken) {
         return res.status(400).json({ error: 'reCAPTCHA verification required' });
       }
 
-      try {
-        const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(recaptchaToken)}`
-        });
-        const verifyData = await verifyResponse.json();
+      const score = await createAssessment({
+        projectID: projectId,
+        recaptchaKey: siteKey,
+        token: recaptchaToken,
+        recaptchaAction: 'register',
+      });
 
-        if (!verifyData.success) {
-          return res.status(400).json({ error: 'reCAPTCHA verification failed' });
-        }
-      } catch (fetchError) {
-        console.error('reCAPTCHA verification request failed:', fetchError);
+      if (score === null) {
         return res.status(500).json({ error: 'Unable to verify reCAPTCHA. Please try again.' });
+      }
+
+      if (score < scoreThreshold) {
+        return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
       }
     }
 
@@ -1586,26 +1637,26 @@ app.put('/api/admin/api-key', authenticateToken, requireAdmin, async (req, res) 
 app.get('/api/admin/recaptcha', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_secret_key')"
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_project_id', 'recaptcha_score_threshold')"
     );
     const settings = {};
     result.rows.forEach(row => { settings[row.setting_key] = row.setting_value; });
 
     const dbSiteKey = settings.recaptcha_site_key || '';
-    const dbSecretKey = settings.recaptcha_secret_key || '';
-    const envSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY || '';
-    const envSecretKey = process.env.RECAPTCHA_SECRET_KEY || '';
+    const dbProjectId = settings.recaptcha_project_id || '';
+    const scoreThreshold = settings.recaptcha_score_threshold || '0.5';
+    const envProjectId = process.env.RECAPTCHA_PROJECT_ID || '';
 
-    const activeSiteKey = (dbSiteKey.trim()) || envSiteKey;
-    const activeSecretKey = (dbSecretKey.trim()) || envSecretKey;
+    const activeSiteKey = (dbSiteKey.trim()) || process.env.REACT_APP_RECAPTCHA_SITE_KEY || '';
+    const activeProjectId = (dbProjectId.trim()) || envProjectId;
 
     res.json({
       siteKey: dbSiteKey,
-      hasSecretKey: !!(dbSecretKey && dbSecretKey.trim()),
-      secretKeyPreview: (dbSecretKey && dbSecretKey.trim()) ? `...${dbSecretKey.slice(-4)}` : null,
-      hasEnvSiteKey: !!envSiteKey,
-      hasEnvSecretKey: !!envSecretKey,
-      enabled: !!(activeSiteKey && activeSecretKey),
+      projectId: dbProjectId,
+      scoreThreshold: scoreThreshold,
+      hasEnvProjectId: !!envProjectId,
+      hasCredentials: !!getRecaptchaClient(),
+      enabled: !!(activeSiteKey && activeProjectId && getRecaptchaClient()),
     });
   } catch (error) {
     console.error('Get recaptcha settings error:', error);
@@ -1616,7 +1667,7 @@ app.get('/api/admin/recaptcha', authenticateToken, requireAdmin, async (req, res
 // Update reCAPTCHA settings (admin)
 app.put('/api/admin/recaptcha', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { site_key, secret_key, clear_secret } = req.body;
+    const { site_key, project_id, score_threshold } = req.body;
 
     if (site_key !== undefined) {
       await pool.query(`
@@ -1626,16 +1677,21 @@ app.put('/api/admin/recaptcha', authenticateToken, requireAdmin, async (req, res
       `, [site_key]);
     }
 
-    if (clear_secret) {
-      await pool.query(
-        "UPDATE system_settings SET setting_value = '', updated_at = CURRENT_TIMESTAMP WHERE setting_key = 'recaptcha_secret_key'"
-      );
-    } else if (secret_key !== undefined) {
+    if (project_id !== undefined) {
       await pool.query(`
         INSERT INTO system_settings (setting_key, setting_value)
-        VALUES ('recaptcha_secret_key', $1)
+        VALUES ('recaptcha_project_id', $1)
         ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
-      `, [secret_key]);
+      `, [project_id]);
+    }
+
+    if (score_threshold !== undefined) {
+      const clamped = Math.min(1.0, Math.max(0.0, parseFloat(score_threshold) || 0.5));
+      await pool.query(`
+        INSERT INTO system_settings (setting_key, setting_value)
+        VALUES ('recaptcha_score_threshold', $1)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
+      `, [String(clamped)]);
     }
 
     // Log the settings change
@@ -1646,8 +1702,8 @@ app.put('/api/admin/recaptcha', authenticateToken, requireAdmin, async (req, res
       resourceType: 'setting',
       details: {
         siteKeyChanged: site_key !== undefined,
-        secretKeyCleared: !!clear_secret,
-        secretKeyChanged: !clear_secret && secret_key !== undefined,
+        projectIdChanged: project_id !== undefined,
+        scoreThresholdChanged: score_threshold !== undefined,
       },
       req
     });

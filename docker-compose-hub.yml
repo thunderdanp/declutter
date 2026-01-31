@@ -30,7 +30,8 @@ services:
       DATABASE_URL: postgresql://declutter_user:declutter_password@postgres:5432/declutter_db
       JWT_SECRET: your-secret-key-change-this-in-production
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      RECAPTCHA_SECRET_KEY: ${RECAPTCHA_SECRET_KEY}
+      RECAPTCHA_PROJECT_ID: ${RECAPTCHA_PROJECT_ID}
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/gcp-sa-key.json
       SMTP_SERVER: ${SMTP_SERVER}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_LOGIN: ${SMTP_LOGIN}
@@ -42,6 +43,7 @@ services:
         condition: service_healthy
     volumes:
       - ./uploads:/app/uploads
+      - ${GCP_CREDENTIALS_FILE:-./gcp-sa-key.json}:/app/credentials/gcp-sa-key.json:ro
     networks:
       - declutter-network
     restart: unless-stopped

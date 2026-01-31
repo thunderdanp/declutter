@@ -9,14 +9,15 @@ function AdminSettings({ setIsAuthenticated }) {
   });
   const [recaptchaSettings, setRecaptchaSettings] = useState({
     siteKey: '',
-    hasSecretKey: false,
-    secretKeyPreview: null,
-    hasEnvSiteKey: false,
-    hasEnvSecretKey: false,
+    projectId: '',
+    scoreThreshold: '0.5',
+    hasEnvProjectId: false,
+    hasCredentials: false,
     enabled: false,
   });
   const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
-  const [recaptchaSecretKey, setRecaptchaSecretKey] = useState('');
+  const [recaptchaProjectId, setRecaptchaProjectId] = useState('');
+  const [recaptchaScoreThreshold, setRecaptchaScoreThreshold] = useState(0.5);
   const [savingRecaptcha, setSavingRecaptcha] = useState(false);
   const [recaptchaMessage, setRecaptchaMessage] = useState('');
   const [smtpSettings, setSmtpSettings] = useState({
@@ -88,6 +89,8 @@ function AdminSettings({ setIsAuthenticated }) {
         const data = await response.json();
         setRecaptchaSettings(data);
         setRecaptchaSiteKey(data.siteKey || '');
+        setRecaptchaProjectId(data.projectId || '');
+        setRecaptchaScoreThreshold(parseFloat(data.scoreThreshold) || 0.5);
       }
     } catch (error) {
       console.error('Error fetching reCAPTCHA settings:', error);
@@ -100,10 +103,11 @@ function AdminSettings({ setIsAuthenticated }) {
 
     try {
       const token = localStorage.getItem('token');
-      const body = { site_key: recaptchaSiteKey };
-      if (recaptchaSecretKey) {
-        body.secret_key = recaptchaSecretKey;
-      }
+      const body = {
+        site_key: recaptchaSiteKey,
+        project_id: recaptchaProjectId,
+        score_threshold: recaptchaScoreThreshold,
+      };
 
       const response = await fetch('/api/admin/recaptcha', {
         method: 'PUT',
@@ -116,7 +120,6 @@ function AdminSettings({ setIsAuthenticated }) {
 
       if (response.ok) {
         setRecaptchaMessage('reCAPTCHA settings saved!');
-        setRecaptchaSecretKey('');
         fetchRecaptchaSettings();
         setTimeout(() => setRecaptchaMessage(''), 3000);
       } else {
@@ -125,38 +128,6 @@ function AdminSettings({ setIsAuthenticated }) {
     } catch (error) {
       console.error('Error saving reCAPTCHA settings:', error);
       setRecaptchaMessage('Failed to save reCAPTCHA settings');
-    } finally {
-      setSavingRecaptcha(false);
-    }
-  };
-
-  const handleClearRecaptchaSecret = async () => {
-    if (!window.confirm('Remove the reCAPTCHA secret key from database? This will disable reCAPTCHA unless an environment variable is set.')) return;
-
-    setSavingRecaptcha(true);
-    setRecaptchaMessage('');
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/recaptcha', {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ clear_secret: true })
-      });
-
-      if (response.ok) {
-        setRecaptchaMessage('reCAPTCHA secret key removed');
-        fetchRecaptchaSettings();
-        setTimeout(() => setRecaptchaMessage(''), 3000);
-      } else {
-        setRecaptchaMessage('Failed to remove reCAPTCHA secret key');
-      }
-    } catch (error) {
-      console.error('Error removing reCAPTCHA secret key:', error);
-      setRecaptchaMessage('Failed to remove reCAPTCHA secret key');
     } finally {
       setSavingRecaptcha(false);
     }
@@ -501,7 +472,7 @@ function AdminSettings({ setIsAuthenticated }) {
 
             <div className="settings-section">
               <h2 className="settings-section-title">
-                reCAPTCHA Configuration
+                reCAPTCHA Enterprise
                 {recaptchaSettings.enabled ? (
                   <span className="status-badge status-approved" style={{ marginLeft: '0.75rem', fontSize: '0.75rem' }}>Enabled</span>
                 ) : (
@@ -509,7 +480,8 @@ function AdminSettings({ setIsAuthenticated }) {
                 )}
               </h2>
               <p className="form-help" style={{ marginBottom: '1.5rem' }}>
-                Configure Google reCAPTCHA to protect the registration form from bots. Both a site key and secret key are required to enable reCAPTCHA.
+                Configure Google reCAPTCHA Enterprise to protect the registration form from bots using invisible score-based verification.
+                A site key, project ID, and GCP service account credentials are required.
               </p>
 
               <div className="form-group">
@@ -518,38 +490,69 @@ function AdminSettings({ setIsAuthenticated }) {
                   type="text"
                   id="recaptcha_site_key"
                   className="form-control"
-                  placeholder="Enter reCAPTCHA site key"
+                  placeholder="Enter reCAPTCHA Enterprise site key"
                   value={recaptchaSiteKey}
                   onChange={(e) => setRecaptchaSiteKey(e.target.value)}
                 />
-                <p className="form-help">The public site key displayed on the registration form.</p>
+                <p className="form-help">The public site key for reCAPTCHA Enterprise (score-based key type).</p>
               </div>
 
               <div className="form-group">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label htmlFor="recaptcha_secret_key">Secret Key</label>
-                  {recaptchaSettings.hasSecretKey ? (
-                    <span className="status-badge status-approved">Configured ({recaptchaSettings.secretKeyPreview})</span>
-                  ) : recaptchaSettings.hasEnvSecretKey ? (
-                    <span className="status-badge status-info">Using Env Variable</span>
-                  ) : (
-                    <span className="status-badge status-pending">Not Set</span>
+                  <label htmlFor="recaptcha_project_id">GCP Project ID</label>
+                  {recaptchaSettings.hasEnvProjectId && (
+                    <span className="status-badge status-info">Env Variable Available</span>
                   )}
                 </div>
                 <input
-                  type="password"
-                  id="recaptcha_secret_key"
+                  type="text"
+                  id="recaptcha_project_id"
                   className="form-control"
-                  placeholder={recaptchaSettings.hasSecretKey ? 'Enter new secret key to replace' : 'Enter reCAPTCHA secret key'}
-                  value={recaptchaSecretKey}
-                  onChange={(e) => setRecaptchaSecretKey(e.target.value)}
+                  placeholder="Enter Google Cloud project ID"
+                  value={recaptchaProjectId}
+                  onChange={(e) => setRecaptchaProjectId(e.target.value)}
                 />
-                <p className="form-help">The secret key used for server-side verification. Never exposed publicly.</p>
+                <p className="form-help">The Google Cloud project ID where reCAPTCHA Enterprise is enabled.</p>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="recaptcha_score_threshold">
+                  Score Threshold: {recaptchaScoreThreshold.toFixed(1)}
+                </label>
+                <input
+                  type="range"
+                  id="recaptcha_score_threshold"
+                  className="form-control"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={recaptchaScoreThreshold}
+                  onChange={(e) => setRecaptchaScoreThreshold(parseFloat(e.target.value))}
+                  style={{ padding: '0.25rem 0' }}
+                />
+                <p className="form-help">
+                  Scores range from 0.0 (likely bot) to 1.0 (likely human). Requests scoring below this threshold are rejected. Default: 0.5.
+                </p>
+              </div>
+
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label>GCP Credentials</label>
+                  {recaptchaSettings.hasCredentials ? (
+                    <span className="status-badge status-approved">GOOGLE_APPLICATION_CREDENTIALS Detected</span>
+                  ) : (
+                    <span className="status-badge status-pending">GOOGLE_APPLICATION_CREDENTIALS Not Detected</span>
+                  )}
+                </div>
+                <p className="form-help">
+                  Set the <code>GOOGLE_APPLICATION_CREDENTIALS</code> environment variable to the path of your GCP service account JSON key file.
+                  This is required for the backend to authenticate with the reCAPTCHA Enterprise API.
+                </p>
               </div>
 
               <div className="settings-actions">
                 {recaptchaMessage && (
-                  <div className={`message ${recaptchaMessage.includes('saved') || recaptchaMessage.includes('removed') ? 'message-success' : 'message-error'}`}>
+                  <div className={`message ${recaptchaMessage.includes('saved') ? 'message-success' : 'message-error'}`}>
                     {recaptchaMessage}
                   </div>
                 )}
@@ -561,20 +564,11 @@ function AdminSettings({ setIsAuthenticated }) {
                   >
                     {savingRecaptcha ? 'Saving...' : 'Save reCAPTCHA Settings'}
                   </button>
-                  {recaptchaSettings.hasSecretKey && (
-                    <button
-                      className="btn btn-secondary"
-                      onClick={handleClearRecaptchaSecret}
-                      disabled={savingRecaptcha}
-                    >
-                      Clear Secret Key
-                    </button>
-                  )}
                 </div>
                 <p className="form-help" style={{ marginTop: '0.75rem' }}>
-                  Get your keys from the{' '}
-                  <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener noreferrer">
-                    Google reCAPTCHA Admin Console
+                  Manage your keys in the{' '}
+                  <a href="https://console.cloud.google.com/security/recaptcha" target="_blank" rel="noopener noreferrer">
+                    Google Cloud reCAPTCHA Enterprise Console
                   </a>
                 </p>
               </div>

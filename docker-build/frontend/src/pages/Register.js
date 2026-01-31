@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import ReCAPTCHA from 'react-google-recaptcha';
 import './Auth.css';
 
 function Register({ setIsAuthenticated }) {
@@ -13,9 +12,7 @@ function Register({ setIsAuthenticated }) {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [captchaToken, setCaptchaToken] = useState(null);
   const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
-  const recaptchaRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -28,6 +25,39 @@ function Register({ setIsAuthenticated }) {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!recaptchaSiteKey) return;
+
+    const scriptId = 'recaptcha-enterprise-script';
+    if (document.getElementById(scriptId)) return;
+
+    const script = document.createElement('script');
+    script.id = scriptId;
+    script.src = `https://www.google.com/recaptcha/enterprise.js?render=${recaptchaSiteKey}`;
+    script.async = true;
+    document.head.appendChild(script);
+
+    return () => {
+      const el = document.getElementById(scriptId);
+      if (el) el.remove();
+    };
+  }, [recaptchaSiteKey]);
+
+  const getRecaptchaToken = useCallback(() => {
+    return new Promise((resolve, reject) => {
+      if (!recaptchaSiteKey || !window.grecaptcha?.enterprise) {
+        resolve(null);
+        return;
+      }
+      window.grecaptcha.enterprise.ready(() => {
+        window.grecaptcha.enterprise
+          .execute(recaptchaSiteKey, { action: 'register' })
+          .then(resolve)
+          .catch(reject);
+      });
+    });
+  }, [recaptchaSiteKey]);
 
   const handleChange = (e) => {
     setFormData({
@@ -50,14 +80,25 @@ function Register({ setIsAuthenticated }) {
       return;
     }
 
-    if (recaptchaSiteKey && !captchaToken) {
-      setError('Please complete the captcha');
-      return;
-    }
-
     setLoading(true);
 
     try {
+      let captchaToken = null;
+      if (recaptchaSiteKey) {
+        try {
+          captchaToken = await getRecaptchaToken();
+        } catch (captchaError) {
+          setError('reCAPTCHA verification failed. Please try again.');
+          setLoading(false);
+          return;
+        }
+        if (!captchaToken) {
+          setError('reCAPTCHA verification failed. Please try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
@@ -81,13 +122,9 @@ function Register({ setIsAuthenticated }) {
         navigate('/profile'); // Go to personality profile setup
       } else {
         setError(data.error || 'Registration failed');
-        recaptchaRef.current?.reset();
-        setCaptchaToken(null);
       }
     } catch (err) {
       setError('Network error. Please try again.');
-      recaptchaRef.current?.reset();
-      setCaptchaToken(null);
     } finally {
       setLoading(false);
     }
@@ -167,14 +204,11 @@ function Register({ setIsAuthenticated }) {
           {error && <div className="error-message">{error}</div>}
 
           {recaptchaSiteKey && (
-            <div className="recaptcha-container">
-              <ReCAPTCHA
-                ref={recaptchaRef}
-                sitekey={recaptchaSiteKey}
-                onChange={setCaptchaToken}
-                onExpired={() => setCaptchaToken(null)}
-              />
-            </div>
+            <p className="recaptcha-attribution" style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.5rem' }}>
+              This site is protected by reCAPTCHA and the Google{' '}
+              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and{' '}
+              <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.
+            </p>
           )}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
