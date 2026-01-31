@@ -91,6 +91,10 @@ const runMigrations = async () => {
         ('google_api_key', ''),
         ('ollama_base_url', 'http://localhost:11434')
       ON CONFLICT (setting_key) DO NOTHING;
+      INSERT INTO system_settings (setting_key, setting_value) VALUES
+        ('recaptcha_site_key', ''),
+        ('recaptcha_secret_key', '')
+      ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('LLM provider migrations applied successfully');
   } catch (err) {
@@ -195,6 +199,32 @@ const logActivity = async ({ userId, action, actionType, resourceType = null, re
   }
 };
 
+// ============= PUBLIC CONFIG ROUTES =============
+
+// Get reCAPTCHA config (public - no auth required)
+app.get('/api/config/recaptcha', async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_secret_key')"
+    );
+    const settings = {};
+    result.rows.forEach(row => { settings[row.setting_key] = row.setting_value; });
+
+    const siteKey = (settings.recaptcha_site_key && settings.recaptcha_site_key.trim()) || process.env.REACT_APP_RECAPTCHA_SITE_KEY || '';
+    const secretKey = (settings.recaptcha_secret_key && settings.recaptcha_secret_key.trim()) || process.env.RECAPTCHA_SECRET_KEY || '';
+    const enabled = !!(siteKey && secretKey);
+
+    const response = { enabled };
+    if (enabled) {
+      response.siteKey = siteKey;
+    }
+    res.json(response);
+  } catch (error) {
+    console.error('Get recaptcha config error:', error);
+    res.json({ enabled: false });
+  }
+});
+
 // ============= AUTH ROUTES =============
 
 // Register
@@ -209,9 +239,41 @@ app.post('/api/auth/register', [
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { email, password, firstName, lastName } = req.body;
+  const { email, password, firstName, lastName, recaptchaToken } = req.body;
 
   try {
+    // reCAPTCHA server-side verification
+    const recaptchaResult = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_secret_key')"
+    );
+    const recaptchaSettings = {};
+    recaptchaResult.rows.forEach(row => { recaptchaSettings[row.setting_key] = row.setting_value; });
+
+    const siteKey = (recaptchaSettings.recaptcha_site_key && recaptchaSettings.recaptcha_site_key.trim()) || process.env.REACT_APP_RECAPTCHA_SITE_KEY || '';
+    const secretKey = (recaptchaSettings.recaptcha_secret_key && recaptchaSettings.recaptcha_secret_key.trim()) || process.env.RECAPTCHA_SECRET_KEY || '';
+
+    if (siteKey && secretKey) {
+      if (!recaptchaToken) {
+        return res.status(400).json({ error: 'reCAPTCHA verification required' });
+      }
+
+      try {
+        const verifyResponse = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(recaptchaToken)}`
+        });
+        const verifyData = await verifyResponse.json();
+
+        if (!verifyData.success) {
+          return res.status(400).json({ error: 'reCAPTCHA verification failed' });
+        }
+      } catch (fetchError) {
+        console.error('reCAPTCHA verification request failed:', fetchError);
+        return res.status(500).json({ error: 'Unable to verify reCAPTCHA. Please try again.' });
+      }
+    }
+
     // Check if user exists
     const existingUser = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existingUser.rows.length > 0) {
@@ -1514,6 +1576,85 @@ app.put('/api/admin/api-key', authenticateToken, requireAdmin, async (req, res) 
     res.json({ message: 'Settings saved successfully' });
   } catch (error) {
     console.error('Update API key error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= RECAPTCHA ADMIN ROUTES =============
+
+// Get reCAPTCHA settings (admin)
+app.get('/api/admin/recaptcha', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_secret_key')"
+    );
+    const settings = {};
+    result.rows.forEach(row => { settings[row.setting_key] = row.setting_value; });
+
+    const dbSiteKey = settings.recaptcha_site_key || '';
+    const dbSecretKey = settings.recaptcha_secret_key || '';
+    const envSiteKey = process.env.REACT_APP_RECAPTCHA_SITE_KEY || '';
+    const envSecretKey = process.env.RECAPTCHA_SECRET_KEY || '';
+
+    const activeSiteKey = (dbSiteKey.trim()) || envSiteKey;
+    const activeSecretKey = (dbSecretKey.trim()) || envSecretKey;
+
+    res.json({
+      siteKey: dbSiteKey,
+      hasSecretKey: !!(dbSecretKey && dbSecretKey.trim()),
+      secretKeyPreview: (dbSecretKey && dbSecretKey.trim()) ? `...${dbSecretKey.slice(-4)}` : null,
+      hasEnvSiteKey: !!envSiteKey,
+      hasEnvSecretKey: !!envSecretKey,
+      enabled: !!(activeSiteKey && activeSecretKey),
+    });
+  } catch (error) {
+    console.error('Get recaptcha settings error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update reCAPTCHA settings (admin)
+app.put('/api/admin/recaptcha', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { site_key, secret_key, clear_secret } = req.body;
+
+    if (site_key !== undefined) {
+      await pool.query(`
+        INSERT INTO system_settings (setting_key, setting_value)
+        VALUES ('recaptcha_site_key', $1)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
+      `, [site_key]);
+    }
+
+    if (clear_secret) {
+      await pool.query(
+        "UPDATE system_settings SET setting_value = '', updated_at = CURRENT_TIMESTAMP WHERE setting_key = 'recaptcha_secret_key'"
+      );
+    } else if (secret_key !== undefined) {
+      await pool.query(`
+        INSERT INTO system_settings (setting_key, setting_value)
+        VALUES ('recaptcha_secret_key', $1)
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
+      `, [secret_key]);
+    }
+
+    // Log the settings change
+    await logActivity({
+      userId: req.user.userId,
+      action: 'recaptcha_settings_changed',
+      actionType: 'ADMIN',
+      resourceType: 'setting',
+      details: {
+        siteKeyChanged: site_key !== undefined,
+        secretKeyCleared: !!clear_secret,
+        secretKeyChanged: !clear_secret && secret_key !== undefined,
+      },
+      req
+    });
+
+    res.json({ message: 'reCAPTCHA settings saved successfully' });
+  } catch (error) {
+    console.error('Update recaptcha settings error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

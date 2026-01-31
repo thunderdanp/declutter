@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import ReCAPTCHA from 'react-google-recaptcha';
 import './Auth.css';
@@ -14,8 +14,20 @@ function Register({ setIsAuthenticated }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [captchaToken, setCaptchaToken] = useState(null);
+  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
   const recaptchaRef = useRef(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetch('/api/config/recaptcha')
+      .then(res => res.json())
+      .then(data => {
+        if (data.enabled && data.siteKey) {
+          setRecaptchaSiteKey(data.siteKey);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -38,7 +50,7 @@ function Register({ setIsAuthenticated }) {
       return;
     }
 
-    if (process.env.REACT_APP_RECAPTCHA_SITE_KEY && !captchaToken) {
+    if (recaptchaSiteKey && !captchaToken) {
       setError('Please complete the captcha');
       return;
     }
@@ -154,11 +166,11 @@ function Register({ setIsAuthenticated }) {
 
           {error && <div className="error-message">{error}</div>}
 
-          {process.env.REACT_APP_RECAPTCHA_SITE_KEY && (
+          {recaptchaSiteKey && (
             <div className="recaptcha-container">
               <ReCAPTCHA
                 ref={recaptchaRef}
-                sitekey={process.env.REACT_APP_RECAPTCHA_SITE_KEY}
+                sitekey={recaptchaSiteKey}
                 onChange={setCaptchaToken}
                 onExpired={() => setCaptchaToken(null)}
               />

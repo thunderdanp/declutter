@@ -7,6 +7,18 @@ function AdminSettings({ setIsAuthenticated }) {
   const [settings, setSettings] = useState({
     registration_mode: 'automatic'
   });
+  const [recaptchaSettings, setRecaptchaSettings] = useState({
+    siteKey: '',
+    hasSecretKey: false,
+    secretKeyPreview: null,
+    hasEnvSiteKey: false,
+    hasEnvSecretKey: false,
+    enabled: false,
+  });
+  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
+  const [recaptchaSecretKey, setRecaptchaSecretKey] = useState('');
+  const [savingRecaptcha, setSavingRecaptcha] = useState(false);
+  const [recaptchaMessage, setRecaptchaMessage] = useState('');
   const [smtpSettings, setSmtpSettings] = useState({
     smtp_host: '',
     smtp_port: '587',
@@ -40,6 +52,7 @@ function AdminSettings({ setIsAuthenticated }) {
 
   useEffect(() => {
     fetchSettings();
+    fetchRecaptchaSettings();
     fetchSmtpSettings();
     fetchApiKeyStatus();
   }, []);
@@ -61,6 +74,91 @@ function AdminSettings({ setIsAuthenticated }) {
       console.error('Error fetching settings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRecaptchaSettings = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/recaptcha', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setRecaptchaSettings(data);
+        setRecaptchaSiteKey(data.siteKey || '');
+      }
+    } catch (error) {
+      console.error('Error fetching reCAPTCHA settings:', error);
+    }
+  };
+
+  const handleSaveRecaptcha = async () => {
+    setSavingRecaptcha(true);
+    setRecaptchaMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const body = { site_key: recaptchaSiteKey };
+      if (recaptchaSecretKey) {
+        body.secret_key = recaptchaSecretKey;
+      }
+
+      const response = await fetch('/api/admin/recaptcha', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (response.ok) {
+        setRecaptchaMessage('reCAPTCHA settings saved!');
+        setRecaptchaSecretKey('');
+        fetchRecaptchaSettings();
+        setTimeout(() => setRecaptchaMessage(''), 3000);
+      } else {
+        setRecaptchaMessage('Failed to save reCAPTCHA settings');
+      }
+    } catch (error) {
+      console.error('Error saving reCAPTCHA settings:', error);
+      setRecaptchaMessage('Failed to save reCAPTCHA settings');
+    } finally {
+      setSavingRecaptcha(false);
+    }
+  };
+
+  const handleClearRecaptchaSecret = async () => {
+    if (!window.confirm('Remove the reCAPTCHA secret key from database? This will disable reCAPTCHA unless an environment variable is set.')) return;
+
+    setSavingRecaptcha(true);
+    setRecaptchaMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/recaptcha', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ clear_secret: true })
+      });
+
+      if (response.ok) {
+        setRecaptchaMessage('reCAPTCHA secret key removed');
+        fetchRecaptchaSettings();
+        setTimeout(() => setRecaptchaMessage(''), 3000);
+      } else {
+        setRecaptchaMessage('Failed to remove reCAPTCHA secret key');
+      }
+    } catch (error) {
+      console.error('Error removing reCAPTCHA secret key:', error);
+      setRecaptchaMessage('Failed to remove reCAPTCHA secret key');
+    } finally {
+      setSavingRecaptcha(false);
     }
   };
 
@@ -398,6 +496,87 @@ function AdminSettings({ setIsAuthenticated }) {
                 >
                   {saving ? 'Saving...' : 'Save Registration Settings'}
                 </button>
+              </div>
+            </div>
+
+            <div className="settings-section">
+              <h2 className="settings-section-title">
+                reCAPTCHA Configuration
+                {recaptchaSettings.enabled ? (
+                  <span className="status-badge status-approved" style={{ marginLeft: '0.75rem', fontSize: '0.75rem' }}>Enabled</span>
+                ) : (
+                  <span className="status-badge status-pending" style={{ marginLeft: '0.75rem', fontSize: '0.75rem' }}>Disabled</span>
+                )}
+              </h2>
+              <p className="form-help" style={{ marginBottom: '1.5rem' }}>
+                Configure Google reCAPTCHA to protect the registration form from bots. Both a site key and secret key are required to enable reCAPTCHA.
+              </p>
+
+              <div className="form-group">
+                <label htmlFor="recaptcha_site_key">Site Key</label>
+                <input
+                  type="text"
+                  id="recaptcha_site_key"
+                  className="form-control"
+                  placeholder="Enter reCAPTCHA site key"
+                  value={recaptchaSiteKey}
+                  onChange={(e) => setRecaptchaSiteKey(e.target.value)}
+                />
+                <p className="form-help">The public site key displayed on the registration form.</p>
+              </div>
+
+              <div className="form-group">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label htmlFor="recaptcha_secret_key">Secret Key</label>
+                  {recaptchaSettings.hasSecretKey ? (
+                    <span className="status-badge status-approved">Configured ({recaptchaSettings.secretKeyPreview})</span>
+                  ) : recaptchaSettings.hasEnvSecretKey ? (
+                    <span className="status-badge status-info">Using Env Variable</span>
+                  ) : (
+                    <span className="status-badge status-pending">Not Set</span>
+                  )}
+                </div>
+                <input
+                  type="password"
+                  id="recaptcha_secret_key"
+                  className="form-control"
+                  placeholder={recaptchaSettings.hasSecretKey ? 'Enter new secret key to replace' : 'Enter reCAPTCHA secret key'}
+                  value={recaptchaSecretKey}
+                  onChange={(e) => setRecaptchaSecretKey(e.target.value)}
+                />
+                <p className="form-help">The secret key used for server-side verification. Never exposed publicly.</p>
+              </div>
+
+              <div className="settings-actions">
+                {recaptchaMessage && (
+                  <div className={`message ${recaptchaMessage.includes('saved') || recaptchaMessage.includes('removed') ? 'message-success' : 'message-error'}`}>
+                    {recaptchaMessage}
+                  </div>
+                )}
+                <div className="button-group">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSaveRecaptcha}
+                    disabled={savingRecaptcha}
+                  >
+                    {savingRecaptcha ? 'Saving...' : 'Save reCAPTCHA Settings'}
+                  </button>
+                  {recaptchaSettings.hasSecretKey && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleClearRecaptchaSecret}
+                      disabled={savingRecaptcha}
+                    >
+                      Clear Secret Key
+                    </button>
+                  )}
+                </div>
+                <p className="form-help" style={{ marginTop: '0.75rem' }}>
+                  Get your keys from the{' '}
+                  <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener noreferrer">
+                    Google reCAPTCHA Admin Console
+                  </a>
+                </p>
               </div>
             </div>
 

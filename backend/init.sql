@@ -134,6 +134,12 @@ INSERT INTO system_settings (setting_key, setting_value) VALUES
   ('ollama_base_url', 'http://localhost:11434')
 ON CONFLICT (setting_key) DO NOTHING;
 
+-- reCAPTCHA settings
+INSERT INTO system_settings (setting_key, setting_value) VALUES
+  ('recaptcha_site_key', ''),
+  ('recaptcha_secret_key', '')
+ON CONFLICT (setting_key) DO NOTHING;
+
 -- ============================================================================
 -- PERSONALITY PROFILES TABLE
 -- ============================================================================
