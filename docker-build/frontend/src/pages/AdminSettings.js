@@ -307,7 +307,9 @@ function AdminSettings({ setIsAuthenticated }) {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('/api/admin/settings/registration_mode', {
+
+      // Save registration mode
+      const regResponse = await fetch('/api/admin/settings/registration_mode', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -316,7 +318,17 @@ function AdminSettings({ setIsAuthenticated }) {
         body: JSON.stringify({ value: settings.registration_mode })
       });
 
-      if (response.ok) {
+      // Save email verification setting
+      const verifyResponse = await fetch('/api/admin/settings/require_email_verification', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ value: settings.require_email_verification || 'false' })
+      });
+
+      if (regResponse.ok && verifyResponse.ok) {
         setMessage('Settings saved successfully!');
         setTimeout(() => setMessage(''), 3000);
       } else {
@@ -456,6 +468,22 @@ function AdminSettings({ setIsAuthenticated }) {
                     'New users must wait for admin approval before they can login.'}
                   {settings.registration_mode === 'disallowed' &&
                     'No new users can register. Existing users can still login.'}
+                </p>
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={settings.require_email_verification === 'true'}
+                    onChange={(e) => setSettings({ ...settings, require_email_verification: e.target.checked ? 'true' : 'false' })}
+                    style={{ width: 'auto' }}
+                  />
+                  Require Email Verification
+                </label>
+                <p className="form-help">
+                  When enabled, new users must verify their email address before logging in.
+                  Requires SMTP to be configured for sending verification emails.
                 </p>
               </div>
 
