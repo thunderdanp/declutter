@@ -321,7 +321,18 @@ This link will expire in 24 hours.
 If you didn''t create an account, please ignore this email.
 
 Best regards,
-The Declutter Team', 'Sent when user registers to verify email address', true, 'email_verification')
+The Declutter Team', 'Sent when user registers to verify email address', true, 'email_verification'),
+('account_approved', 'Your Account Has Been Approved!', 'Hello {{firstName}},
+
+Great news! Your Declutter Assistant account has been approved. You can now log in and start organizing your life.
+
+Get started by:
+1. Creating your personality profile
+2. Adding items to evaluate
+3. Following AI-powered recommendations
+
+Best regards,
+The Declutter Team', 'Sent when an admin approves a user account', true, 'account_approved')
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================

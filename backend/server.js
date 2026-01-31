@@ -157,6 +157,19 @@ const runMigrations = async () => {
       INSERT INTO system_settings (setting_key, setting_value)
         VALUES ('require_email_verification', 'false')
         ON CONFLICT (setting_key) DO NOTHING;
+      INSERT INTO email_templates (name, subject, body, description, is_system, trigger_event)
+        VALUES ('account_approved', 'Your Account Has Been Approved!', 'Hello {{firstName}},
+
+Great news! Your Declutter Assistant account has been approved. You can now log in and start organizing your life.
+
+Get started by:
+1. Creating your personality profile
+2. Adding items to evaluate
+3. Following AI-powered recommendations
+
+Best regards,
+The Declutter Team', 'Sent when an admin approves a user account', true, 'account_approved')
+        ON CONFLICT (name) DO NOTHING;
     `);
     console.log('LLM provider migrations applied successfully');
   } catch (err) {
@@ -1712,7 +1725,22 @@ app.get('/api/admin/users', authenticateToken, requireAdmin, async (req, res) =>
 app.patch('/api/admin/users/:id/approve', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.query('UPDATE users SET is_approved = true WHERE id = $1', [id]);
+    const result = await pool.query(
+      'UPDATE users SET is_approved = true WHERE id = $1 RETURNING email, first_name, last_name',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+
+    // Send approval notification email
+    await emailService.sendTriggeredEmail('account_approved', user.email, {
+      firstName: user.first_name || 'User',
+      lastName: user.last_name || ''
+    });
 
     // Log activity
     await logActivity({
