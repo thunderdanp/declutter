@@ -12,6 +12,8 @@ function Register({ setIsAuthenticated }) {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState(false);
   const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
   const navigate = useNavigate();
 
@@ -116,10 +118,16 @@ function Register({ setIsAuthenticated }) {
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        setIsAuthenticated(true);
-        navigate('/profile'); // Go to personality profile setup
+        if (data.requiresApproval) {
+          setPendingApproval(true);
+        } else if (data.requiresVerification) {
+          setVerificationSent(true);
+        } else {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+          setIsAuthenticated(true);
+          navigate('/profile'); // Go to personality profile setup
+        }
       } else {
         setError(data.error || 'Registration failed');
       }
@@ -129,6 +137,54 @@ function Register({ setIsAuthenticated }) {
       setLoading(false);
     }
   };
+
+  if (pendingApproval) {
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <div className="auth-header">
+            <h1>Registration Submitted</h1>
+            <p>Your account is pending approval</p>
+          </div>
+          <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+            <div className="message message-success" style={{ marginBottom: '1.5rem' }}>
+              Registration successful! An administrator will review your account.
+            </div>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+              You'll be able to log in once your account has been approved.
+            </p>
+            <Link to="/login" className="btn btn-primary btn-block">
+              Go to Login
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (verificationSent) {
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <div className="auth-header">
+            <h1>Check Your Email</h1>
+            <p>We've sent a verification link to your email address</p>
+          </div>
+          <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
+            <div className="message message-success" style={{ marginBottom: '1.5rem' }}>
+              Registration successful! Please check your email to verify your account.
+            </div>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+              Click the link in the email to verify your account. The link will expire in 24 hours.
+            </p>
+            <Link to="/login" className="btn btn-primary btn-block">
+              Go to Login
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-container">
