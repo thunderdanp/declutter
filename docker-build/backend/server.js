@@ -340,7 +340,7 @@ app.get('/api/config/recaptcha', async (req, res) => {
 
 // Register
 app.post('/api/auth/register', registerLimiter, [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false }),
   body('password').isLength({ min: 6 }),
   body('firstName').trim().notEmpty(),
   body('lastName').trim().notEmpty()
@@ -514,7 +514,7 @@ app.post('/api/auth/register', registerLimiter, [
 
 // Login
 app.post('/api/auth/login', loginLimiter, [
-  body('email').isEmail().normalizeEmail(),
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false }),
   body('password').notEmpty()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -657,7 +657,7 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // Forgot password - send reset email
 app.post('/api/auth/forgot-password', emailActionLimiter, [
-  body('email').isEmail().normalizeEmail()
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false })
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -845,7 +845,7 @@ app.get('/api/auth/verify-email/:token', emailActionLimiter, async (req, res) =>
 
 // Resend verification email
 app.post('/api/auth/resend-verification', emailActionLimiter, [
-  body('email').isEmail().normalizeEmail()
+  body('email').isEmail().normalizeEmail({ gmail_remove_dots: false })
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
