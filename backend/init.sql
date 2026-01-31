@@ -146,6 +146,10 @@ INSERT INTO system_settings (setting_key, setting_value) VALUES
   ('recaptcha_score_threshold', '0.5')
 ON CONFLICT (setting_key) DO NOTHING;
 
+-- AI analysis prompt (empty = use default from code)
+INSERT INTO system_settings (setting_key, setting_value) VALUES ('analysis_prompt', '')
+ON CONFLICT (setting_key) DO NOTHING;
+
 -- ============================================================================
 -- PERSONALITY PROFILES TABLE
 -- ============================================================================

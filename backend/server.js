@@ -170,6 +170,9 @@ Get started by:
 Best regards,
 The Declutter Team', 'Sent when an admin approves a user account', true, 'account_approved')
         ON CONFLICT (name) DO NOTHING;
+      INSERT INTO system_settings (setting_key, setting_value)
+        VALUES ('analysis_prompt', '')
+        ON CONFLICT (setting_key) DO NOTHING;
     `);
     console.log('LLM provider migrations applied successfully');
   } catch (err) {
@@ -1140,13 +1143,19 @@ app.post('/api/analyze-image', authenticateToken, aiLimiter, upload.single('imag
     );
     const categoryList = categoriesResult.rows.map(c => c.slug).join(', ');
 
+    // Fetch custom analysis prompt if configured
+    const promptResult = await pool.query(
+      "SELECT setting_value FROM system_settings WHERE setting_key = 'analysis_prompt'"
+    );
+    const customPrompt = promptResult.rows[0]?.setting_value || null;
+
     // Read the uploaded image file
     const imageBuffer = await fs.readFile(req.file.path);
     const base64Image = imageBuffer.toString('base64');
     const mediaType = req.file.mimetype;
 
     // Call the LLM provider
-    const result = await llmProviders.analyzeImage(providerName, apiKeyOrUrl, base64Image, mediaType, categoryList);
+    const result = await llmProviders.analyzeImage(providerName, apiKeyOrUrl, base64Image, mediaType, categoryList, customPrompt || undefined);
 
     const inputTokens = result.inputTokens;
     const outputTokens = result.outputTokens;
@@ -2128,6 +2137,90 @@ app.put('/api/admin/api-key', authenticateToken, requireAdmin, async (req, res) 
     res.json({ message: 'Settings saved successfully' });
   } catch (error) {
     console.error('Update API key error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ============= ANALYSIS PROMPT ADMIN ROUTES =============
+
+// Get analysis prompt (admin)
+app.get('/api/admin/analysis-prompt', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT setting_value FROM system_settings WHERE setting_key = 'analysis_prompt'"
+    );
+    const storedPrompt = result.rows[0]?.setting_value || '';
+    const isCustom = storedPrompt.trim().length > 0;
+
+    res.json({
+      prompt: isCustom ? storedPrompt : llmProviders.DEFAULT_ANALYSIS_PROMPT,
+      isCustom,
+      defaultPrompt: llmProviders.DEFAULT_ANALYSIS_PROMPT,
+    });
+  } catch (error) {
+    console.error('Error fetching analysis prompt:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update analysis prompt (admin)
+app.put('/api/admin/analysis-prompt', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { prompt } = req.body;
+
+    if (!prompt || typeof prompt !== 'string') {
+      return res.status(400).json({ error: 'Prompt is required' });
+    }
+
+    if (!prompt.includes('{{categories}}')) {
+      return res.status(400).json({ error: 'Prompt must contain the {{categories}} placeholder' });
+    }
+
+    await pool.query(`
+      INSERT INTO system_settings (setting_key, setting_value)
+      VALUES ('analysis_prompt', $1)
+      ON CONFLICT (setting_key) DO UPDATE SET setting_value = $1, updated_at = CURRENT_TIMESTAMP
+    `, [prompt]);
+
+    await logActivity({
+      userId: req.user.userId,
+      action: 'analysis_prompt_updated',
+      actionType: 'ADMIN',
+      resourceType: 'setting',
+      details: { setting: 'analysis_prompt' },
+      req,
+    });
+
+    res.json({ message: 'Analysis prompt saved successfully', isCustom: true });
+  } catch (error) {
+    console.error('Error saving analysis prompt:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset analysis prompt to default (admin)
+app.delete('/api/admin/analysis-prompt', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    await pool.query(
+      "UPDATE system_settings SET setting_value = '', updated_at = CURRENT_TIMESTAMP WHERE setting_key = 'analysis_prompt'"
+    );
+
+    await logActivity({
+      userId: req.user.userId,
+      action: 'analysis_prompt_reset',
+      actionType: 'ADMIN',
+      resourceType: 'setting',
+      details: { setting: 'analysis_prompt' },
+      req,
+    });
+
+    res.json({
+      message: 'Analysis prompt reset to default',
+      isCustom: false,
+      defaultPrompt: llmProviders.DEFAULT_ANALYSIS_PROMPT,
+    });
+  } catch (error) {
+    console.error('Error resetting analysis prompt:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

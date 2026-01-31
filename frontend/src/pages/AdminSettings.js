@@ -40,6 +40,11 @@ function AdminSettings({ setIsAuthenticated }) {
   });
   const [providerKeys, setProviderKeys] = useState({ anthropic: '', openai: '', google: '' });
   const [ollamaUrl, setOllamaUrl] = useState('http://localhost:11434');
+  const [analysisPrompt, setAnalysisPrompt] = useState('');
+  const [defaultAnalysisPrompt, setDefaultAnalysisPrompt] = useState('');
+  const [isCustomPrompt, setIsCustomPrompt] = useState(false);
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [promptMessage, setPromptMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
@@ -56,6 +61,7 @@ function AdminSettings({ setIsAuthenticated }) {
     fetchRecaptchaSettings();
     fetchSmtpSettings();
     fetchApiKeyStatus();
+    fetchAnalysisPrompt();
   }, []);
 
   const fetchSettings = async () => {
@@ -169,6 +175,90 @@ function AdminSettings({ setIsAuthenticated }) {
       }
     } catch (error) {
       console.error('Error fetching API key status:', error);
+    }
+  };
+
+  const fetchAnalysisPrompt = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/analysis-prompt', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAnalysisPrompt(data.prompt || '');
+        setDefaultAnalysisPrompt(data.defaultPrompt || '');
+        setIsCustomPrompt(data.isCustom || false);
+      }
+    } catch (error) {
+      console.error('Error fetching analysis prompt:', error);
+    }
+  };
+
+  const handleSavePrompt = async () => {
+    if (!analysisPrompt.includes('{{categories}}')) {
+      setPromptMessage('Error: Prompt must contain the {{categories}} placeholder');
+      return;
+    }
+
+    setSavingPrompt(true);
+    setPromptMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/analysis-prompt', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ prompt: analysisPrompt })
+      });
+
+      if (response.ok) {
+        setPromptMessage('Analysis prompt saved successfully!');
+        setIsCustomPrompt(true);
+        setTimeout(() => setPromptMessage(''), 3000);
+      } else {
+        const data = await response.json();
+        setPromptMessage(data.error || 'Failed to save analysis prompt');
+      }
+    } catch (error) {
+      console.error('Error saving analysis prompt:', error);
+      setPromptMessage('Failed to save analysis prompt');
+    } finally {
+      setSavingPrompt(false);
+    }
+  };
+
+  const handleResetPrompt = async () => {
+    if (!window.confirm('Reset the analysis prompt to the default? Your custom prompt will be removed.')) return;
+
+    setSavingPrompt(true);
+    setPromptMessage('');
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/admin/analysis-prompt', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAnalysisPrompt(data.defaultPrompt || defaultAnalysisPrompt);
+        setIsCustomPrompt(false);
+        setPromptMessage('Prompt reset to default');
+        setTimeout(() => setPromptMessage(''), 3000);
+      } else {
+        setPromptMessage('Failed to reset analysis prompt');
+      }
+    } catch (error) {
+      console.error('Error resetting analysis prompt:', error);
+      setPromptMessage('Failed to reset analysis prompt');
+    } finally {
+      setSavingPrompt(false);
     }
   };
 
@@ -863,6 +953,62 @@ function AdminSettings({ setIsAuthenticated }) {
                   {apiKeyMessage}
                 </div>
               )}
+            </div>
+
+            <div className="settings-section">
+              <h2 className="settings-section-title">
+                AI Analysis Prompt
+                {isCustomPrompt ? (
+                  <span className="status-badge status-approved" style={{ marginLeft: '0.75rem', fontSize: '0.75rem' }}>Custom</span>
+                ) : (
+                  <span className="status-badge status-info" style={{ marginLeft: '0.75rem', fontSize: '0.75rem' }}>Default</span>
+                )}
+              </h2>
+
+              <div style={{ padding: '0.75rem 1rem', background: 'var(--warning-bg, #fff3cd)', border: '1px solid var(--warning-border, #ffc107)', borderRadius: '8px', marginBottom: '1.5rem', color: 'var(--warning-text, #856404)' }}>
+                <strong>Warning:</strong> The AI response must be valid JSON containing <code>name</code>, <code>description</code>, <code>category</code>, and <code>location</code> fields. Modifying the prompt may break image analysis if the AI no longer returns the expected format.
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="analysis_prompt">Prompt Template</label>
+                <textarea
+                  id="analysis_prompt"
+                  className="form-control"
+                  rows={12}
+                  value={analysisPrompt}
+                  onChange={(e) => setAnalysisPrompt(e.target.value)}
+                  style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                />
+                <p className="form-help">
+                  Use <code>{'{{categories}}'}</code> as a placeholder — it will be replaced with the list of category slugs from your database at analysis time.
+                </p>
+              </div>
+
+              <div className="settings-actions">
+                {promptMessage && (
+                  <div className={`message ${promptMessage.includes('success') || promptMessage.includes('reset to default') ? 'message-success' : 'message-error'}`}>
+                    {promptMessage}
+                  </div>
+                )}
+                <div className="button-group">
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleSavePrompt}
+                    disabled={savingPrompt}
+                  >
+                    {savingPrompt ? 'Saving...' : 'Save Prompt'}
+                  </button>
+                  {isCustomPrompt && (
+                    <button
+                      className="btn btn-secondary"
+                      onClick={handleResetPrompt}
+                      disabled={savingPrompt}
+                    >
+                      Reset to Default
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}

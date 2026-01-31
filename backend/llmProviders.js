@@ -62,17 +62,20 @@ function getAvailableProviders() {
   }));
 }
 
-function buildAnalysisPrompt(categoryList) {
-  return `Please analyze this image and identify what item or items are shown. Provide your response in the following JSON format only, with no additional text:
+const DEFAULT_ANALYSIS_PROMPT = `Please analyze this image and identify what item or items are shown. Provide your response in the following JSON format only, with no additional text:
 
 {
   "name": "A brief, clear name for the item (e.g., 'Vintage Record Player', 'Winter Coat', 'Kitchen Blender')",
   "description": "A detailed description of the item including its appearance, condition, and any notable features (2-3 sentences)",
-  "category": "One of these categories: ${categoryList}",
+  "category": "One of these categories: {{categories}}",
   "location": "Suggest the most likely room where this item is typically found or used. One of: bedroom, living-room, kitchen, bathroom, garage, attic, basement, closet, other"
 }
 
 Be specific and descriptive. If multiple items are visible, focus on the main/central item.`;
+
+function buildAnalysisPrompt(categoryList, customPrompt) {
+  const template = customPrompt || DEFAULT_ANALYSIS_PROMPT;
+  return template.replace(/\{\{categories\}\}/g, categoryList);
 }
 
 function calculateCost(providerName, inputTokens, outputTokens) {
@@ -85,7 +88,7 @@ function calculateCost(providerName, inputTokens, outputTokens) {
 
 // --- Provider-specific analysis functions ---
 
-async function analyzeWithAnthropic(apiKey, base64Image, mediaType, categoryList) {
+async function analyzeWithAnthropic(apiKey, base64Image, mediaType, categoryList, customPrompt) {
   const anthropic = new Anthropic({ apiKey });
   const model = PROVIDERS.anthropic.defaultModel;
   const message = await anthropic.messages.create({
@@ -99,7 +102,7 @@ async function analyzeWithAnthropic(apiKey, base64Image, mediaType, categoryList
             type: 'image',
             source: { type: 'base64', media_type: mediaType, data: base64Image },
           },
-          { type: 'text', text: buildAnalysisPrompt(categoryList) },
+          { type: 'text', text: buildAnalysisPrompt(categoryList, customPrompt) },
         ],
       },
     ],
@@ -113,7 +116,7 @@ async function analyzeWithAnthropic(apiKey, base64Image, mediaType, categoryList
   };
 }
 
-async function analyzeWithOpenAI(apiKey, base64Image, mediaType, categoryList) {
+async function analyzeWithOpenAI(apiKey, base64Image, mediaType, categoryList, customPrompt) {
   const openai = new OpenAI({ apiKey });
   const model = PROVIDERS.openai.defaultModel;
   const response = await openai.chat.completions.create({
@@ -127,7 +130,7 @@ async function analyzeWithOpenAI(apiKey, base64Image, mediaType, categoryList) {
             type: 'image_url',
             image_url: { url: `data:${mediaType};base64,${base64Image}` },
           },
-          { type: 'text', text: buildAnalysisPrompt(categoryList) },
+          { type: 'text', text: buildAnalysisPrompt(categoryList, customPrompt) },
         ],
       },
     ],
@@ -141,13 +144,13 @@ async function analyzeWithOpenAI(apiKey, base64Image, mediaType, categoryList) {
   };
 }
 
-async function analyzeWithGoogle(apiKey, base64Image, mediaType, categoryList) {
+async function analyzeWithGoogle(apiKey, base64Image, mediaType, categoryList, customPrompt) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = PROVIDERS.google.defaultModel;
   const generativeModel = genAI.getGenerativeModel({ model });
 
   const result = await generativeModel.generateContent([
-    { text: buildAnalysisPrompt(categoryList) },
+    { text: buildAnalysisPrompt(categoryList, customPrompt) },
     {
       inlineData: {
         mimeType: mediaType,
@@ -168,7 +171,7 @@ async function analyzeWithGoogle(apiKey, base64Image, mediaType, categoryList) {
   };
 }
 
-async function analyzeWithOllama(baseUrl, base64Image, mediaType, categoryList) {
+async function analyzeWithOllama(baseUrl, base64Image, mediaType, categoryList, customPrompt) {
   const model = PROVIDERS.ollama.defaultModel;
   const url = `${baseUrl.replace(/\/+$/, '')}/api/chat`;
 
@@ -181,7 +184,7 @@ async function analyzeWithOllama(baseUrl, base64Image, mediaType, categoryList) 
       messages: [
         {
           role: 'user',
-          content: buildAnalysisPrompt(categoryList),
+          content: buildAnalysisPrompt(categoryList, customPrompt),
           images: [base64Image],
         },
       ],
@@ -212,16 +215,16 @@ async function analyzeWithOllama(baseUrl, base64Image, mediaType, categoryList) 
  * @param {string} categoryList - Comma-separated category slugs
  * @returns {Promise<{text: string, inputTokens: number, outputTokens: number, model: string}>}
  */
-async function analyzeImage(providerName, apiKeyOrUrl, base64Image, mediaType, categoryList) {
+async function analyzeImage(providerName, apiKeyOrUrl, base64Image, mediaType, categoryList, customPrompt) {
   switch (providerName) {
     case 'anthropic':
-      return analyzeWithAnthropic(apiKeyOrUrl, base64Image, mediaType, categoryList);
+      return analyzeWithAnthropic(apiKeyOrUrl, base64Image, mediaType, categoryList, customPrompt);
     case 'openai':
-      return analyzeWithOpenAI(apiKeyOrUrl, base64Image, mediaType, categoryList);
+      return analyzeWithOpenAI(apiKeyOrUrl, base64Image, mediaType, categoryList, customPrompt);
     case 'google':
-      return analyzeWithGoogle(apiKeyOrUrl, base64Image, mediaType, categoryList);
+      return analyzeWithGoogle(apiKeyOrUrl, base64Image, mediaType, categoryList, customPrompt);
     case 'ollama':
-      return analyzeWithOllama(apiKeyOrUrl, base64Image, mediaType, categoryList);
+      return analyzeWithOllama(apiKeyOrUrl, base64Image, mediaType, categoryList, customPrompt);
     default:
       throw new Error(`Unsupported LLM provider: ${providerName}`);
   }
@@ -229,6 +232,7 @@ async function analyzeImage(providerName, apiKeyOrUrl, base64Image, mediaType, c
 
 module.exports = {
   PROVIDERS,
+  DEFAULT_ANALYSIS_PROMPT,
   getProvider,
   getAvailableProviders,
   buildAnalysisPrompt,
