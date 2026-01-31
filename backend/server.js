@@ -301,6 +301,16 @@ app.post('/api/auth/register', [
   const { email, password, firstName, lastName, recaptchaToken } = req.body;
 
   try {
+    // Check registration mode
+    const regModeResult = await pool.query(
+      "SELECT setting_value FROM system_settings WHERE setting_key = 'registration_mode'"
+    );
+    const registrationMode = regModeResult.rows.length > 0 ? regModeResult.rows[0].setting_value : 'automatic';
+
+    if (registrationMode === 'disallowed') {
+      return res.status(403).json({ error: 'Registration is currently disabled.' });
+    }
+
     // reCAPTCHA Enterprise server-side verification
     const recaptchaResult = await pool.query(
       "SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('recaptcha_site_key', 'recaptcha_project_id', 'recaptcha_score_threshold')"
@@ -344,12 +354,31 @@ app.post('/api/auth/register', [
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Create user
+    const isApproved = registrationMode !== 'approval';
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash, first_name, last_name) VALUES ($1, $2, $3, $4) RETURNING id, email, first_name, last_name',
-      [email, passwordHash, firstName, lastName]
+      'INSERT INTO users (email, password_hash, first_name, last_name, is_approved) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, first_name, last_name',
+      [email, passwordHash, firstName, lastName, isApproved]
     );
 
     const user = result.rows[0];
+
+    // If approval required, don't return JWT
+    if (!isApproved) {
+      await logActivity({
+        userId: user.id,
+        action: 'register',
+        actionType: 'USER',
+        resourceType: 'user',
+        resourceId: user.id,
+        details: { email: user.email, requiresApproval: true },
+        req
+      });
+
+      return res.status(200).json({
+        message: 'Registration successful. Your account is pending admin approval.',
+        requiresApproval: true
+      });
+    }
 
     // Check if email verification is required
     const verificationSetting = await pool.query(
@@ -445,7 +474,7 @@ app.post('/api/auth/login', [
 
   try {
     const result = await pool.query(
-      'SELECT id, email, password_hash, first_name, last_name, is_admin, email_verified FROM users WHERE email = $1',
+      'SELECT id, email, password_hash, first_name, last_name, is_admin, is_approved, email_verified FROM users WHERE email = $1',
       [email]
     );
 
@@ -476,6 +505,20 @@ app.post('/api/auth/login', [
         req
       });
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check if account is approved
+    if (!user.is_approved) {
+      await logActivity({
+        userId: user.id,
+        action: 'login_failed',
+        actionType: 'SYSTEM',
+        resourceType: 'user',
+        resourceId: user.id,
+        details: { email, reason: 'account_not_approved' },
+        req
+      });
+      return res.status(403).json({ error: 'Your account is pending admin approval.' });
     }
 
     // Check email verification requirement
