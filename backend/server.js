@@ -3444,6 +3444,315 @@ app.get('/api/admin/activity-logs/filters', authenticateToken, requireAdmin, asy
   }
 });
 
+// System Health Dashboard
+app.get('/api/admin/system-health', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const timestamp = new Date().toISOString();
+
+    // Helper to format bytes
+    const formatBytes = (bytes) => {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    };
+
+    // --- Database checks ---
+    let dbConnected = true;
+    let dbLatencyMs = 0;
+    let poolStats = {};
+    let databaseSize = '0 B';
+    let databaseSizeBytes = 0;
+    let tableCounts = {};
+    let tableSizes = [];
+
+    try {
+      // Pool stats
+      poolStats = {
+        poolTotal: pool.totalCount || 0,
+        poolIdle: pool.idleCount || 0,
+        poolActive: (pool.totalCount || 0) - (pool.idleCount || 0),
+        poolWaiting: pool.waitingCount || 0
+      };
+
+      // DB latency
+      const latencyStart = Date.now();
+      await pool.query('SELECT 1');
+      dbLatencyMs = Date.now() - latencyStart;
+
+      // Database size, table sizes, and table counts in parallel
+      const [dbSizeResult, tableSizesResult, ...countResults] = await Promise.all([
+        pool.query('SELECT pg_database_size(current_database()) as size'),
+        pool.query(`
+          SELECT relname as table_name, pg_total_relation_size(c.oid) as size_bytes
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relkind = 'r' AND n.nspname = 'public'
+          ORDER BY pg_total_relation_size(c.oid) DESC
+        `),
+        pool.query('SELECT COUNT(*) FROM users'),
+        pool.query('SELECT COUNT(*) FROM items'),
+        pool.query('SELECT COUNT(*) FROM activity_logs'),
+        pool.query('SELECT COUNT(*) FROM api_usage_logs'),
+        pool.query('SELECT COUNT(*) FROM categories'),
+        pool.query('SELECT COUNT(*) FROM announcements'),
+        pool.query('SELECT COUNT(*) FROM email_templates')
+      ]);
+
+      databaseSizeBytes = parseInt(dbSizeResult.rows[0].size);
+      databaseSize = formatBytes(databaseSizeBytes);
+
+      tableSizes = tableSizesResult.rows.map(row => ({
+        table: row.table_name,
+        size: formatBytes(parseInt(row.size_bytes)),
+        sizeBytes: parseInt(row.size_bytes)
+      }));
+
+      const tableNames = ['users', 'items', 'activity_logs', 'api_usage_logs', 'categories', 'announcements', 'email_templates'];
+      tableNames.forEach((name, i) => {
+        tableCounts[name] = parseInt(countResults[i].rows[0].count);
+      });
+    } catch (dbError) {
+      console.error('System health DB check error:', dbError);
+      dbConnected = false;
+    }
+
+    // --- Endpoint health checks ---
+    const endpoints = [];
+
+    // Health check endpoint
+    try {
+      const healthStart = Date.now();
+      const http = require('http');
+      await new Promise((resolve, reject) => {
+        const req = http.get(`http://localhost:${PORT}/health`, (resp) => {
+          let data = '';
+          resp.on('data', chunk => data += chunk);
+          resp.on('end', () => {
+            if (resp.statusCode === 200) resolve(data);
+            else reject(new Error(`Status ${resp.statusCode}`));
+          });
+        });
+        req.on('error', reject);
+        req.setTimeout(5000, () => { req.destroy(); reject(new Error('Timeout')); });
+      });
+      endpoints.push({ name: 'Health Check', endpoint: '/health', status: 'healthy', latencyMs: Date.now() - healthStart });
+    } catch (e) {
+      endpoints.push({ name: 'Health Check', endpoint: '/health', status: 'down', latencyMs: null });
+    }
+
+    // Admin stats endpoint
+    try {
+      const statsStart = Date.now();
+      const http = require('http');
+      const token = req.headers['authorization']?.split(' ')[1];
+      await new Promise((resolve, reject) => {
+        const r = http.get(`http://localhost:${PORT}/api/admin/stats`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }, (resp) => {
+          let data = '';
+          resp.on('data', chunk => data += chunk);
+          resp.on('end', () => {
+            if (resp.statusCode === 200) resolve(data);
+            else reject(new Error(`Status ${resp.statusCode}`));
+          });
+        });
+        r.on('error', reject);
+        r.setTimeout(5000, () => { r.destroy(); reject(new Error('Timeout')); });
+      });
+      endpoints.push({ name: 'Admin Stats', endpoint: '/api/admin/stats', status: 'healthy', latencyMs: Date.now() - statsStart });
+    } catch (e) {
+      endpoints.push({ name: 'Admin Stats', endpoint: '/api/admin/stats', status: 'down', latencyMs: null });
+    }
+
+    // API Usage stats endpoint
+    try {
+      const apiStart = Date.now();
+      const http = require('http');
+      const token = req.headers['authorization']?.split(' ')[1];
+      await new Promise((resolve, reject) => {
+        const r = http.get(`http://localhost:${PORT}/api/admin/api-usage/stats`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }, (resp) => {
+          let data = '';
+          resp.on('data', chunk => data += chunk);
+          resp.on('end', () => {
+            if (resp.statusCode === 200) resolve(data);
+            else reject(new Error(`Status ${resp.statusCode}`));
+          });
+        });
+        r.on('error', reject);
+        r.setTimeout(5000, () => { r.destroy(); reject(new Error('Timeout')); });
+      });
+      endpoints.push({ name: 'API Usage Stats', endpoint: '/api/admin/api-usage/stats', status: 'healthy', latencyMs: Date.now() - apiStart });
+    } catch (e) {
+      endpoints.push({ name: 'API Usage Stats', endpoint: '/api/admin/api-usage/stats', status: 'down', latencyMs: null });
+    }
+
+    // Database query check
+    try {
+      const dbStart = Date.now();
+      await pool.query('SELECT 1');
+      endpoints.push({ name: 'Database Query', endpoint: 'SELECT 1', status: 'healthy', latencyMs: Date.now() - dbStart });
+    } catch (e) {
+      endpoints.push({ name: 'Database Query', endpoint: 'SELECT 1', status: 'down', latencyMs: null });
+    }
+
+    // SMTP check
+    try {
+      const smtpResult = await emailService.testConnection();
+      if (smtpResult.success) {
+        endpoints.push({ name: 'SMTP', endpoint: 'smtp', status: 'healthy', latencyMs: null });
+      } else if (smtpResult.error === 'SMTP not configured') {
+        endpoints.push({ name: 'SMTP', endpoint: 'smtp', status: 'unconfigured', latencyMs: null });
+      } else {
+        endpoints.push({ name: 'SMTP', endpoint: 'smtp', status: 'down', latencyMs: null });
+      }
+    } catch (e) {
+      endpoints.push({ name: 'SMTP', endpoint: 'smtp', status: 'down', latencyMs: null });
+    }
+
+    // --- Storage stats ---
+    let uploadsStats = { totalSize: '0 B', totalSizeBytes: 0, fileCount: 0 };
+    try {
+      const files = fsSync.readdirSync(uploadsDir);
+      let totalSize = 0;
+      let fileCount = 0;
+      for (const file of files) {
+        try {
+          const stat = fsSync.statSync(path.join(uploadsDir, file));
+          if (stat.isFile()) {
+            totalSize += stat.size;
+            fileCount++;
+          }
+        } catch (e) { /* skip unreadable files */ }
+      }
+      uploadsStats = {
+        totalSize: formatBytes(totalSize),
+        totalSizeBytes: totalSize,
+        fileCount
+      };
+    } catch (e) {
+      console.error('System health uploads check error:', e);
+    }
+
+    // --- Error rate monitoring ---
+    let errors = {
+      last24h: { apiErrors: 0, failedLogins: 0, totalApiCalls: 0, errorRate: '0%' },
+      last7d: { apiErrors: 0, failedLogins: 0, totalApiCalls: 0, errorRate: '0%' },
+      last30d: { apiErrors: 0, failedLogins: 0, totalApiCalls: 0, errorRate: '0%' },
+      dailyErrors: [],
+      recentErrors: []
+    };
+
+    try {
+      const [
+        errors24h, errors7d, errors30d,
+        logins24h, logins7d, logins30d,
+        total24h, total7d, total30d,
+        dailyErrorsResult,
+        recentErrorsResult
+      ] = await Promise.all([
+        pool.query(`SELECT COUNT(*) FROM api_usage_logs WHERE success = false AND created_at >= NOW() - INTERVAL '24 hours'`),
+        pool.query(`SELECT COUNT(*) FROM api_usage_logs WHERE success = false AND created_at >= NOW() - INTERVAL '7 days'`),
+        pool.query(`SELECT COUNT(*) FROM api_usage_logs WHERE success = false AND created_at >= NOW() - INTERVAL '30 days'`),
+        pool.query(`SELECT COUNT(*) FROM activity_logs WHERE action = 'login_failed' AND created_at >= NOW() - INTERVAL '24 hours'`),
+        pool.query(`SELECT COUNT(*) FROM activity_logs WHERE action = 'login_failed' AND created_at >= NOW() - INTERVAL '7 days'`),
+        pool.query(`SELECT COUNT(*) FROM activity_logs WHERE action = 'login_failed' AND created_at >= NOW() - INTERVAL '30 days'`),
+        pool.query(`SELECT COUNT(*) FROM api_usage_logs WHERE created_at >= NOW() - INTERVAL '24 hours'`),
+        pool.query(`SELECT COUNT(*) FROM api_usage_logs WHERE created_at >= NOW() - INTERVAL '7 days'`),
+        pool.query(`SELECT COUNT(*) FROM api_usage_logs WHERE created_at >= NOW() - INTERVAL '30 days'`),
+        pool.query(`
+          SELECT
+            DATE(created_at) as date,
+            COUNT(*) FILTER (WHERE success = false) as api_errors,
+            COUNT(*) as total_calls
+          FROM api_usage_logs
+          WHERE created_at >= NOW() - INTERVAL '7 days'
+          GROUP BY DATE(created_at)
+          ORDER BY date
+        `),
+        pool.query(`
+          SELECT aul.id, aul.endpoint, aul.error_message, aul.created_at, u.email as user_email
+          FROM api_usage_logs aul
+          LEFT JOIN users u ON aul.user_id = u.id
+          WHERE aul.success = false
+          ORDER BY aul.created_at DESC
+          LIMIT 10
+        `)
+      ]);
+
+      // Fetch daily login failures separately
+      const dailyLoginsResult = await pool.query(`
+        SELECT DATE(created_at) as date, COUNT(*) as failed_logins
+        FROM activity_logs
+        WHERE action = 'login_failed' AND created_at >= NOW() - INTERVAL '7 days'
+        GROUP BY DATE(created_at)
+      `);
+
+      const loginsByDate = {};
+      dailyLoginsResult.rows.forEach(row => {
+        loginsByDate[row.date.toISOString().split('T')[0]] = parseInt(row.failed_logins);
+      });
+
+      const calcRate = (errors, total) => {
+        if (total === 0) return '0%';
+        return ((errors / total) * 100).toFixed(1) + '%';
+      };
+
+      const e24h = parseInt(errors24h.rows[0].count);
+      const t24h = parseInt(total24h.rows[0].count);
+      const e7d = parseInt(errors7d.rows[0].count);
+      const t7d = parseInt(total7d.rows[0].count);
+      const e30d = parseInt(errors30d.rows[0].count);
+      const t30d = parseInt(total30d.rows[0].count);
+
+      errors = {
+        last24h: { apiErrors: e24h, failedLogins: parseInt(logins24h.rows[0].count), totalApiCalls: t24h, errorRate: calcRate(e24h, t24h) },
+        last7d: { apiErrors: e7d, failedLogins: parseInt(logins7d.rows[0].count), totalApiCalls: t7d, errorRate: calcRate(e7d, t7d) },
+        last30d: { apiErrors: e30d, failedLogins: parseInt(logins30d.rows[0].count), totalApiCalls: t30d, errorRate: calcRate(e30d, t30d) },
+        dailyErrors: dailyErrorsResult.rows.map(row => ({
+          date: row.date.toISOString().split('T')[0],
+          apiErrors: parseInt(row.api_errors),
+          failedLogins: loginsByDate[row.date.toISOString().split('T')[0]] || 0,
+          totalCalls: parseInt(row.total_calls)
+        })),
+        recentErrors: recentErrorsResult.rows
+      };
+    } catch (errError) {
+      console.error('System health error stats error:', errError);
+    }
+
+    // Determine overall status
+    const allHealthy = endpoints.every(e => e.status === 'healthy' || e.status === 'unconfigured');
+    const anyDown = endpoints.some(e => e.status === 'down');
+    const overallStatus = anyDown ? 'down' : (allHealthy ? 'healthy' : 'degraded');
+
+    res.json({
+      timestamp,
+      overallStatus,
+      database: {
+        connected: dbConnected,
+        latencyMs: dbLatencyMs,
+        ...poolStats,
+        databaseSize,
+        databaseSizeBytes,
+        tableCounts,
+        tableSizes
+      },
+      endpoints,
+      storage: {
+        uploads: uploadsStats
+      },
+      errors
+    });
+  } catch (error) {
+    console.error('System health error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);

@@ -221,6 +221,7 @@ function AdminEmailTemplates({ setIsAuthenticated }) {
           <Link to="/admin/email-templates" className="nav-link active">Email Templates</Link>
           <Link to="/admin/announcements" className="nav-link">Announcements</Link>
           <Link to="/admin/settings" className="nav-link">Settings</Link>
+          <Link to="/admin/system-health" className="nav-link">System Health</Link>
           <Link to="/dashboard" className="nav-link">User View</Link>
         </div>
         <div className="admin-sidebar-footer">
