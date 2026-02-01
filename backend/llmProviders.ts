@@ -227,6 +227,118 @@ async function analyzeWithOllama(baseUrl: string, base64Image: string, mediaType
   };
 }
 
+// --- Provider-specific text generation functions ---
+
+async function generateTextWithAnthropic(apiKey: string, prompt: string, systemPrompt: string): Promise<AnalysisResult> {
+  const anthropic = new Anthropic({ apiKey });
+  const model = PROVIDERS.anthropic.defaultModel;
+  const message = await anthropic.messages.create({
+    model,
+    max_tokens: 500,
+    system: systemPrompt,
+    messages: [
+      { role: 'user', content: prompt },
+    ],
+  });
+
+  const firstBlock = message.content[0];
+  return {
+    text: firstBlock.type === 'text' ? firstBlock.text : '',
+    inputTokens: message.usage?.input_tokens || 0,
+    outputTokens: message.usage?.output_tokens || 0,
+    model,
+  };
+}
+
+async function generateTextWithOpenAI(apiKey: string, prompt: string, systemPrompt: string): Promise<AnalysisResult> {
+  const openai = new OpenAI({ apiKey });
+  const model = PROVIDERS.openai.defaultModel;
+  const response = await openai.chat.completions.create({
+    model,
+    max_tokens: 500,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt },
+    ],
+  });
+
+  return {
+    text: response.choices[0].message.content || '',
+    inputTokens: response.usage?.prompt_tokens || 0,
+    outputTokens: response.usage?.completion_tokens || 0,
+    model,
+  };
+}
+
+async function generateTextWithGoogle(apiKey: string, prompt: string, systemPrompt: string): Promise<AnalysisResult> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = PROVIDERS.google.defaultModel;
+  const generativeModel = genAI.getGenerativeModel({
+    model,
+    systemInstruction: systemPrompt,
+  });
+
+  const result = await generativeModel.generateContent([{ text: prompt }]);
+
+  const response = result.response;
+  const text = response.text();
+  const usage = response.usageMetadata || {};
+
+  return {
+    text,
+    inputTokens: (usage as Record<string, number>).promptTokenCount || 0,
+    outputTokens: (usage as Record<string, number>).candidatesTokenCount || 0,
+    model,
+  };
+}
+
+async function generateTextWithOllama(baseUrl: string, prompt: string, systemPrompt: string): Promise<AnalysisResult> {
+  const model = 'llama3.2';
+  const url = `${baseUrl.replace(/\/+$/, '')}/api/chat`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      stream: false,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: prompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errBody = await response.text();
+    throw new Error(`Ollama request failed (${response.status}): ${errBody}`);
+  }
+
+  const data = await response.json() as { message?: { content?: string }; prompt_eval_count?: number; eval_count?: number };
+
+  return {
+    text: data.message?.content || '',
+    inputTokens: data.prompt_eval_count || 0,
+    outputTokens: data.eval_count || 0,
+    model,
+  };
+}
+
+async function generateText(providerName: string, apiKeyOrUrl: string, prompt: string, systemPrompt: string): Promise<AnalysisResult> {
+  switch (providerName) {
+    case 'anthropic':
+      return generateTextWithAnthropic(apiKeyOrUrl, prompt, systemPrompt);
+    case 'openai':
+      return generateTextWithOpenAI(apiKeyOrUrl, prompt, systemPrompt);
+    case 'google':
+      return generateTextWithGoogle(apiKeyOrUrl, prompt, systemPrompt);
+    case 'ollama':
+      return generateTextWithOllama(apiKeyOrUrl, prompt, systemPrompt);
+    default:
+      throw new Error(`Unsupported LLM provider: ${providerName}`);
+  }
+}
+
 async function analyzeImage(providerName: string, apiKeyOrUrl: string, base64Image: string, mediaType: string, categoryList: string, customPrompt?: string): Promise<AnalysisResult> {
   switch (providerName) {
     case 'anthropic':
@@ -250,4 +362,5 @@ export {
   buildAnalysisPrompt,
   calculateCost,
   analyzeImage,
+  generateText,
 };

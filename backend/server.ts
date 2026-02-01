@@ -21,7 +21,7 @@ import { VALID_PERSONALITY_MODES, PERSONALITY_MODES, getPersonalityConfig } from
 import { detectEmotionalTone, getToneInstructions } from './emotionDetection';
 import { getUserPatterns, logOverride } from './userPatterns';
 import { buildRecommendationContext, getDuplicateCount } from './contextBuilder';
-import { buildAIPrompt } from './aiRecommendations';
+import { buildAIPrompt, buildReasoningPrompt } from './aiRecommendations';
 import crypto from 'crypto';
 import { RecaptchaEnterpriseServiceClient } from '@google-cloud/recaptcha-enterprise';
 import * as fsSync from 'fs';
@@ -2673,6 +2673,99 @@ app.post('/api/recommendations/detect-tone', authenticateToken, async (req: Requ
   } catch (error) {
     console.error('Error detecting tone:', error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Generate LLM-based recommendation reasoning
+app.post('/api/recommendations/generate-reasoning', authenticateToken, aiLimiter, async (req: Request, res: Response) => {
+  let usedUserKey = false;
+  let providerName = 'anthropic';
+  let modelName = '';
+
+  try {
+    const {
+      itemName, category, recommendation, personalityMode, userGoal,
+      frequency, lastUsed, emotional, practical, financial,
+      lastUsedTimeframe, itemCondition, isSentimental, userNotes,
+      duplicateCount, emotionalTone
+    } = req.body;
+
+    if (!itemName || !recommendation) {
+      res.json({ reasoning: null });
+      return;
+    }
+
+    // Provider resolution — same pattern as /api/analyze-image
+    const userResult = await pool.query('SELECT llm_provider, llm_api_key, anthropic_api_key FROM users WHERE id = $1', [req.user!.userId]);
+    const userRow = userResult.rows[0];
+    const userProvider = userRow?.llm_provider;
+    const userApiKey = userRow?.llm_api_key || userRow?.anthropic_api_key;
+    usedUserKey = !!userApiKey;
+
+    if (userProvider && llmProviders.getProvider(userProvider)) {
+      providerName = userProvider;
+    } else {
+      const sysProv = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'llm_provider'");
+      if (sysProv.rows[0]?.setting_value && llmProviders.getProvider(sysProv.rows[0].setting_value)) {
+        providerName = sysProv.rows[0].setting_value;
+      }
+    }
+
+    const providerConfig = llmProviders.getProvider(providerName)!;
+    modelName = providerConfig.defaultModel;
+
+    if (!usedUserKey) {
+      const limitCheck = await checkUsageLimits(req.user!.userId);
+      if (!limitCheck.allowed) {
+        res.json({ reasoning: null });
+        return;
+      }
+    }
+
+    let apiKeyOrUrl = userApiKey;
+
+    if (!apiKeyOrUrl) {
+      if (providerName === 'ollama') {
+        const ollamaResult = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = 'ollama_base_url'");
+        apiKeyOrUrl = ollamaResult.rows[0]?.setting_value || 'http://localhost:11434';
+      } else {
+        const envKeyMap: Record<string, string> = { anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GOOGLE_API_KEY' };
+        const dbKeyMap: Record<string, string> = { anthropic: 'anthropic_api_key', openai: 'openai_api_key', google: 'google_api_key' };
+
+        const sysKeyResult = await pool.query("SELECT setting_value FROM system_settings WHERE setting_key = $1", [dbKeyMap[providerName]]);
+        const dbKey = sysKeyResult.rows[0]?.setting_value;
+        const envKey = process.env[envKeyMap[providerName]];
+        apiKeyOrUrl = (dbKey && dbKey.trim()) ? dbKey : envKey;
+      }
+    }
+
+    if (!apiKeyOrUrl) {
+      res.json({ reasoning: null });
+      return;
+    }
+
+    const { prompt, systemPrompt } = buildReasoningPrompt({
+      itemName, category, recommendation, personalityMode, userGoal,
+      frequency, lastUsed, emotional, practical, financial,
+      lastUsedTimeframe, itemCondition, isSentimental, userNotes,
+      duplicateCount, emotionalTone
+    });
+
+    const result = await llmProviders.generateText(providerName, apiKeyOrUrl, prompt, systemPrompt);
+    modelName = result.model || modelName;
+
+    if (!usedUserKey) {
+      await logApiUsage(req.user!.userId, '/api/recommendations/generate-reasoning', modelName, result.inputTokens, result.outputTokens, true, null, false, providerName);
+    }
+
+    const reasoning = result.text?.trim() || null;
+    res.json({ reasoning });
+  } catch (error) {
+    console.error('Error generating reasoning:', error);
+    if (!usedUserKey && modelName) {
+      await logApiUsage(req.user!.userId, '/api/recommendations/generate-reasoning', modelName, 0, 0, false, (error as Error).message, false, providerName);
+    }
+    res.json({ reasoning: null });
   }
 });
 

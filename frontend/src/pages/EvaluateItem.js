@@ -34,6 +34,7 @@ function EvaluateItem({ setIsAuthenticated }) {
   const [imagePreview, setImagePreview] = useState(null);
   const [recommendation, setRecommendation] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [generatingReasoning, setGeneratingReasoning] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState(null);
   const navigate = useNavigate();
@@ -323,13 +324,63 @@ function EvaluateItem({ setIsAuthenticated }) {
           reasoning: reasoning,
           itemId: result.item.id
         });
+        setLoading(false);
+
+        // Try to get LLM-generated reasoning (non-blocking upgrade)
+        setGeneratingReasoning(true);
+        try {
+          const reasoningResponse = await fetch('/api/recommendations/generate-reasoning', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              itemName: formData.name,
+              category: formData.category,
+              recommendation: recommendationType,
+              personalityMode: formData.personalityMode,
+              userGoal: formData.userGoal,
+              frequency: formData.used,
+              lastUsed: formData.used,
+              emotional: formData.sentimental,
+              practical: formData.condition,
+              financial: formData.value,
+              lastUsedTimeframe: formData.lastUsedTimeframe,
+              itemCondition: formData.itemCondition,
+              isSentimental: formData.isSentimental,
+              userNotes: formData.userNotes,
+              duplicateCount: formData.duplicateCount
+            })
+          });
+
+          if (reasoningResponse.ok) {
+            const reasoningData = await reasoningResponse.json();
+            if (reasoningData.reasoning) {
+              setRecommendation(prev => ({ ...prev, reasoning: reasoningData.reasoning }));
+              // Update the saved item with LLM reasoning
+              await fetch(`/api/items/${result.item.id}`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ recommendationReasoning: reasoningData.reasoning })
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching LLM reasoning:', err);
+        } finally {
+          setGeneratingReasoning(false);
+        }
       } else {
         alert('Error saving item. Please try again.');
+        setLoading(false);
       }
     } catch (error) {
       console.error('Error:', error);
       alert('Network error. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -398,6 +449,11 @@ function EvaluateItem({ setIsAuthenticated }) {
             <div className="reasoning-box">
               <h3>Why This Makes Sense</h3>
               <p>{recommendation.reasoning}</p>
+              {generatingReasoning && (
+                <p className="status-analyzing" style={{ marginTop: '8px', fontSize: '0.9em' }}>
+                  Generating personalized explanation...
+                </p>
+              )}
             </div>
 
             <div className="result-actions">

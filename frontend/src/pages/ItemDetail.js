@@ -345,6 +345,53 @@ function ItemDetail({ setIsAuthenticated }) {
         setItem(data.item);
         setIsEditing(false);
         setEditData(null);
+
+        // Try to get LLM-generated reasoning (non-blocking upgrade)
+        try {
+          const reasoningResponse = await fetch('/api/recommendations/generate-reasoning', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              itemName: editData.name,
+              category: editData.category,
+              recommendation: recommendationType,
+              personalityMode: profile?.personality_mode,
+              userGoal: profile?.user_goal,
+              frequency: editData.used,
+              lastUsed: editData.used,
+              emotional: editData.sentimental,
+              practical: editData.condition,
+              financial: editData.value,
+              lastUsedTimeframe: editData.lastUsedTimeframe,
+              itemCondition: editData.itemCondition,
+              isSentimental: editData.isSentimental,
+              userNotes: editData.userNotes,
+              duplicateCount: editData.duplicateCount
+            })
+          });
+
+          if (reasoningResponse.ok) {
+            const reasoningData = await reasoningResponse.json();
+            if (reasoningData.reasoning) {
+              // Update UI with LLM reasoning
+              setItem(prev => ({ ...prev, recommendation_reasoning: reasoningData.reasoning }));
+              // Persist the LLM reasoning
+              await fetch(`/api/items/${id}`, {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ recommendationReasoning: reasoningData.reasoning })
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching LLM reasoning:', err);
+        }
       } else {
         alert('Error saving changes. Please try again.');
       }
