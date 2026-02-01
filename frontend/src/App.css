@@ -242,21 +242,29 @@ body::before {
   }
 
   .dashboard-nav {
-    transition: padding 0.3s ease, gap 0.3s ease;
-  }
-
-  .nav-links {
-    transition: gap 0.3s ease;
+    transition: padding 0.25s ease-out;
   }
 
   .nav-brand h2 {
-    transition: font-size 0.3s ease;
+    transition: font-size 0.25s ease-out;
+  }
+
+  .nav-links {
+    transition: gap 0.25s ease-out;
+  }
+
+  .btn-logout,
+  .btn-theme-toggle {
+    transition: padding 0.25s ease-out, font-size 0.25s ease-out;
+  }
+
+  .nav-link {
+    transition: font-size 0.25s ease-out, color 0.3s ease;
   }
 
   /* Shrink header on scroll */
   body.scrolled .dashboard-nav {
     padding: 0.75rem 1rem;
-    gap: 0.5rem;
   }
 
   body.scrolled .nav-brand h2 {

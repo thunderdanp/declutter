@@ -62,12 +62,20 @@ function App() {
 
   // Handle scroll to shrink header on mobile
   useEffect(() => {
+    let ticking = false;
     const handleScroll = () => {
-      if (window.scrollY > 50) {
-        document.body.classList.add('scrolled');
-      } else {
-        document.body.classList.remove('scrolled');
-      }
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = window.scrollY;
+        const isScrolled = document.body.classList.contains('scrolled');
+        if (!isScrolled && y > 50) {
+          document.body.classList.add('scrolled');
+        } else if (isScrolled && y < 10) {
+          document.body.classList.remove('scrolled');
+        }
+        ticking = false;
+      });
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
