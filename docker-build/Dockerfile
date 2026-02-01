@@ -2,15 +2,18 @@ FROM node:18-alpine AS backend-build
 
 WORKDIR /app/backend
 
-# Copy backend files
+# Copy backend files and install all deps (need typescript for build)
 COPY backend/package*.json ./
-RUN npm install --production
+RUN npm install
 
-COPY backend/server.js ./
-COPY backend/emailService.js ./
-COPY backend/llmProviders.js ./
-COPY backend/init.sql ./
-COPY backend/migrations ./migrations
+COPY backend/*.ts ./
+COPY backend/tsconfig.json ./
+
+# Compile TypeScript to dist/
+RUN npx tsc
+
+# Reinstall production-only deps
+RUN rm -rf node_modules && npm install --production
 
 # Frontend build stage
 FROM node:18-alpine AS frontend-build
@@ -35,8 +38,12 @@ RUN apk add --no-cache nginx
 
 WORKDIR /app
 
-# Copy backend from backend-build stage
-COPY --from=backend-build /app/backend ./backend
+# Copy backend build artifacts
+COPY --from=backend-build /app/backend/node_modules ./backend/node_modules
+COPY --from=backend-build /app/backend/dist ./backend/dist
+COPY --from=backend-build /app/backend/package.json ./backend/
+COPY backend/init.sql ./backend/
+COPY backend/migrations ./backend/migrations
 
 # Copy frontend build from frontend-build stage
 COPY --from=frontend-build /app/frontend/build ./frontend/build

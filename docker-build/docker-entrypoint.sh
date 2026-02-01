@@ -10,4 +10,4 @@ nginx -g 'daemon off;' &
 # Start Node.js backend
 echo "Starting Backend API..."
 cd /app/backend
-exec node server.js
+exec node dist/server.js

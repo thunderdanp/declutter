@@ -1,20 +1,63 @@
-const nodemailer = require('nodemailer');
+import nodemailer from 'nodemailer';
+import { Pool } from 'pg';
+import type { Transporter } from 'nodemailer';
+
+interface SmtpConfig {
+  host: string | undefined;
+  port: number;
+  secure: boolean;
+  auth: {
+    user: string | undefined;
+    pass: string | undefined;
+  };
+  fromAddress: string | undefined;
+}
+
+interface EmailTemplate {
+  name: string;
+  subject: string;
+  body: string;
+  is_enabled: boolean;
+  trigger_event: string;
+}
+
+interface EmailResult {
+  success: boolean;
+  error?: string;
+  messageId?: string;
+  disabled?: boolean;
+  noTemplate?: boolean;
+  templateName?: string;
+}
+
+interface AnnouncementResult {
+  success: boolean;
+  error?: string;
+  sentCount?: number;
+  totalUsers?: number;
+  errors?: { email: string; error: string }[];
+}
 
 class EmailService {
-  constructor(pool) {
+  pool: Pool;
+  transporter: Transporter | null;
+  fromAddress: string;
+
+  constructor(pool: Pool) {
     this.pool = pool;
     this.transporter = null;
+    this.fromAddress = '';
   }
 
   // Get SMTP configuration from database or environment
-  async getSmtpConfig() {
+  async getSmtpConfig(): Promise<SmtpConfig> {
     try {
       const result = await this.pool.query(
         "SELECT setting_key, setting_value FROM system_settings WHERE setting_key LIKE 'smtp_%'"
       );
 
-      const dbConfig = {};
-      result.rows.forEach(row => {
+      const dbConfig: Record<string, string> = {};
+      result.rows.forEach((row: { setting_key: string; setting_value: string }) => {
         dbConfig[row.setting_key] = row.setting_value;
       });
 
@@ -46,7 +89,7 @@ class EmailService {
   }
 
   // Initialize or refresh the transporter
-  async initTransporter() {
+  async initTransporter(): Promise<Transporter | null> {
     const config = await this.getSmtpConfig();
 
     if (!config.host || !config.auth.user || !config.auth.pass) {
@@ -65,7 +108,7 @@ class EmailService {
   }
 
   // Test SMTP connection
-  async testConnection() {
+  async testConnection(): Promise<{ success: boolean; error?: string }> {
     try {
       const transporter = await this.initTransporter();
       if (!transporter) {
@@ -74,12 +117,12 @@ class EmailService {
       await transporter.verify();
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      return { success: false, error: (error as Error).message };
     }
   }
 
   // Get email template by name
-  async getTemplate(name) {
+  async getTemplate(name: string): Promise<EmailTemplate | null> {
     try {
       const result = await this.pool.query(
         'SELECT * FROM email_templates WHERE name = $1',
@@ -93,7 +136,7 @@ class EmailService {
   }
 
   // Get enabled email template by trigger event
-  async getTemplateByTrigger(triggerEvent) {
+  async getTemplateByTrigger(triggerEvent: string): Promise<EmailTemplate | null> {
     try {
       const result = await this.pool.query(
         'SELECT * FROM email_templates WHERE trigger_event = $1 AND is_enabled = true',
@@ -107,7 +150,7 @@ class EmailService {
   }
 
   // Replace template variables with actual values
-  renderTemplate(template, variables) {
+  renderTemplate(template: EmailTemplate, variables: Record<string, string>): { subject: string; body: string } {
     let subject = template.subject;
     let body = template.body;
 
@@ -121,7 +164,7 @@ class EmailService {
   }
 
   // Send email using a template
-  async sendTemplatedEmail(templateName, to, variables) {
+  async sendTemplatedEmail(templateName: string, to: string, variables: Record<string, string>): Promise<EmailResult> {
     try {
       const transporter = await this.initTransporter();
       if (!transporter) {
@@ -154,12 +197,12 @@ class EmailService {
       return { success: true, messageId: info.messageId };
     } catch (error) {
       console.error('Error sending email:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: (error as Error).message };
     }
   }
 
   // Send email using a trigger event
-  async sendTriggeredEmail(triggerEvent, to, variables) {
+  async sendTriggeredEmail(triggerEvent: string, to: string, variables: Record<string, string>): Promise<EmailResult> {
     try {
       const template = await this.getTemplateByTrigger(triggerEvent);
       if (!template) {
@@ -187,12 +230,12 @@ class EmailService {
       return { success: true, messageId: info.messageId, templateName: template.name };
     } catch (error) {
       console.error('Error sending triggered email:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: (error as Error).message };
     }
   }
 
   // Send raw email (without template)
-  async sendEmail(to, subject, body) {
+  async sendEmail(to: string, subject: string, body: string): Promise<EmailResult> {
     try {
       const transporter = await this.initTransporter();
       if (!transporter) {
@@ -211,12 +254,12 @@ class EmailService {
       return { success: true, messageId: info.messageId };
     } catch (error) {
       console.error('Error sending email:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: (error as Error).message };
     }
   }
 
   // Send announcement to all users who have opted in
-  async sendAnnouncement(announcementId) {
+  async sendAnnouncement(announcementId: number): Promise<AnnouncementResult> {
     try {
       // Get announcement details
       const announcementResult = await this.pool.query(
@@ -241,7 +284,7 @@ class EmailService {
 
       const users = usersResult.rows;
       let sentCount = 0;
-      const errors = [];
+      const errors: { email: string; error: string }[] = [];
 
       for (const user of users) {
         const result = await this.sendTriggeredEmail('announcement', user.email, {
@@ -254,7 +297,7 @@ class EmailService {
         if (result.success) {
           sentCount++;
         } else {
-          errors.push({ email: user.email, error: result.error });
+          errors.push({ email: user.email, error: result.error || 'Unknown error' });
         }
       }
 
@@ -272,9 +315,9 @@ class EmailService {
       };
     } catch (error) {
       console.error('Error sending announcement:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: (error as Error).message };
     }
   }
 }
 
-module.exports = EmailService;
+export default EmailService;

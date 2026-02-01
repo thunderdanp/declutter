@@ -4,11 +4,31 @@
  * Supports Anthropic Claude, OpenAI GPT, Google Gemini, and Ollama (local).
  */
 
-const Anthropic = require('@anthropic-ai/sdk');
-const OpenAI = require('openai');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const PROVIDERS = {
+export type ProviderName = 'anthropic' | 'openai' | 'google' | 'ollama';
+
+export interface ProviderConfig {
+  name: string;
+  defaultModel: string;
+  inputPricePerMillion: number;
+  outputPricePerMillion: number;
+  keyPlaceholder: string;
+  consoleUrl: string;
+  requiresApiKey: boolean;
+  requiresBaseUrl: boolean;
+}
+
+export interface AnalysisResult {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  model: string;
+}
+
+const PROVIDERS: Record<ProviderName, ProviderConfig> = {
   anthropic: {
     name: 'Anthropic Claude',
     defaultModel: 'claude-sonnet-4-20250514',
@@ -51,11 +71,11 @@ const PROVIDERS = {
   },
 };
 
-function getProvider(name) {
-  return PROVIDERS[name] || null;
+function getProvider(name: string): ProviderConfig | null {
+  return PROVIDERS[name as ProviderName] || null;
 }
 
-function getAvailableProviders() {
+function getAvailableProviders(): (ProviderConfig & { id: string })[] {
   return Object.entries(PROVIDERS).map(([key, val]) => ({
     id: key,
     ...val,
@@ -73,13 +93,13 @@ const DEFAULT_ANALYSIS_PROMPT = `Please analyze this image and identify what ite
 
 Be specific and descriptive. If multiple items are visible, focus on the main/central item.`;
 
-function buildAnalysisPrompt(categoryList, customPrompt) {
+function buildAnalysisPrompt(categoryList: string, customPrompt?: string | null): string {
   const template = customPrompt || DEFAULT_ANALYSIS_PROMPT;
   return template.replace(/\{\{categories\}\}/g, categoryList);
 }
 
-function calculateCost(providerName, inputTokens, outputTokens) {
-  const provider = PROVIDERS[providerName];
+function calculateCost(providerName: string, inputTokens: number, outputTokens: number): number {
+  const provider = PROVIDERS[providerName as ProviderName];
   if (!provider) return 0;
   const inputCost = (inputTokens / 1000000) * provider.inputPricePerMillion;
   const outputCost = (outputTokens / 1000000) * provider.outputPricePerMillion;
@@ -88,7 +108,7 @@ function calculateCost(providerName, inputTokens, outputTokens) {
 
 // --- Provider-specific analysis functions ---
 
-async function analyzeWithAnthropic(apiKey, base64Image, mediaType, categoryList, customPrompt) {
+async function analyzeWithAnthropic(apiKey: string, base64Image: string, mediaType: string, categoryList: string, customPrompt?: string): Promise<AnalysisResult> {
   const anthropic = new Anthropic({ apiKey });
   const model = PROVIDERS.anthropic.defaultModel;
   const message = await anthropic.messages.create({
@@ -100,7 +120,7 @@ async function analyzeWithAnthropic(apiKey, base64Image, mediaType, categoryList
         content: [
           {
             type: 'image',
-            source: { type: 'base64', media_type: mediaType, data: base64Image },
+            source: { type: 'base64', media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: base64Image },
           },
           { type: 'text', text: buildAnalysisPrompt(categoryList, customPrompt) },
         ],
@@ -108,15 +128,16 @@ async function analyzeWithAnthropic(apiKey, base64Image, mediaType, categoryList
     ],
   });
 
+  const firstBlock = message.content[0];
   return {
-    text: message.content[0].text,
+    text: firstBlock.type === 'text' ? firstBlock.text : '',
     inputTokens: message.usage?.input_tokens || 0,
     outputTokens: message.usage?.output_tokens || 0,
     model,
   };
 }
 
-async function analyzeWithOpenAI(apiKey, base64Image, mediaType, categoryList, customPrompt) {
+async function analyzeWithOpenAI(apiKey: string, base64Image: string, mediaType: string, categoryList: string, customPrompt?: string): Promise<AnalysisResult> {
   const openai = new OpenAI({ apiKey });
   const model = PROVIDERS.openai.defaultModel;
   const response = await openai.chat.completions.create({
@@ -137,14 +158,14 @@ async function analyzeWithOpenAI(apiKey, base64Image, mediaType, categoryList, c
   });
 
   return {
-    text: response.choices[0].message.content,
+    text: response.choices[0].message.content || '',
     inputTokens: response.usage?.prompt_tokens || 0,
     outputTokens: response.usage?.completion_tokens || 0,
     model,
   };
 }
 
-async function analyzeWithGoogle(apiKey, base64Image, mediaType, categoryList, customPrompt) {
+async function analyzeWithGoogle(apiKey: string, base64Image: string, mediaType: string, categoryList: string, customPrompt?: string): Promise<AnalysisResult> {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = PROVIDERS.google.defaultModel;
   const generativeModel = genAI.getGenerativeModel({ model });
@@ -165,13 +186,13 @@ async function analyzeWithGoogle(apiKey, base64Image, mediaType, categoryList, c
 
   return {
     text,
-    inputTokens: usage.promptTokenCount || 0,
-    outputTokens: usage.candidatesTokenCount || 0,
+    inputTokens: (usage as Record<string, number>).promptTokenCount || 0,
+    outputTokens: (usage as Record<string, number>).candidatesTokenCount || 0,
     model,
   };
 }
 
-async function analyzeWithOllama(baseUrl, base64Image, mediaType, categoryList, customPrompt) {
+async function analyzeWithOllama(baseUrl: string, base64Image: string, mediaType: string, categoryList: string, customPrompt?: string): Promise<AnalysisResult> {
   const model = PROVIDERS.ollama.defaultModel;
   const url = `${baseUrl.replace(/\/+$/, '')}/api/chat`;
 
@@ -196,7 +217,7 @@ async function analyzeWithOllama(baseUrl, base64Image, mediaType, categoryList, 
     throw new Error(`Ollama request failed (${response.status}): ${errBody}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as { message?: { content?: string }; prompt_eval_count?: number; eval_count?: number };
 
   return {
     text: data.message?.content || '',
@@ -206,16 +227,7 @@ async function analyzeWithOllama(baseUrl, base64Image, mediaType, categoryList, 
   };
 }
 
-/**
- * Analyze an image using the specified LLM provider.
- * @param {string} providerName - One of: anthropic, openai, google, ollama
- * @param {string} apiKeyOrUrl  - API key (or base URL for Ollama)
- * @param {string} base64Image  - Base64-encoded image data
- * @param {string} mediaType    - MIME type (e.g. image/jpeg)
- * @param {string} categoryList - Comma-separated category slugs
- * @returns {Promise<{text: string, inputTokens: number, outputTokens: number, model: string}>}
- */
-async function analyzeImage(providerName, apiKeyOrUrl, base64Image, mediaType, categoryList, customPrompt) {
+async function analyzeImage(providerName: string, apiKeyOrUrl: string, base64Image: string, mediaType: string, categoryList: string, customPrompt?: string): Promise<AnalysisResult> {
   switch (providerName) {
     case 'anthropic':
       return analyzeWithAnthropic(apiKeyOrUrl, base64Image, mediaType, categoryList, customPrompt);
@@ -230,7 +242,7 @@ async function analyzeImage(providerName, apiKeyOrUrl, base64Image, mediaType, c
   }
 }
 
-module.exports = {
+export {
   PROVIDERS,
   DEFAULT_ANALYSIS_PROMPT,
   getProvider,
