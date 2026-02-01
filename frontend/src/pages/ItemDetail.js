@@ -16,6 +16,7 @@ function ItemDetail({ setIsAuthenticated }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [generatingReasoning, setGeneratingReasoning] = useState(false);
   const [savingDecision, setSavingDecision] = useState(false);
   const [profile, setProfile] = useState(null);
   const [householdMembers, setHouseholdMembers] = useState([]);
@@ -338,11 +339,14 @@ function ItemDetail({ setIsAuthenticated }) {
 
       if (response.ok) {
         const data = await response.json();
-        setItem(data.item);
+        // Clear reasoning while LLM generates a new one
+        setItem({ ...data.item, recommendation_reasoning: null });
         setIsEditing(false);
         setEditData(null);
 
-        // Try to get LLM-generated reasoning (non-blocking upgrade)
+        // Try to get LLM-generated reasoning, fall back to hardcoded
+        setGeneratingReasoning(true);
+        let finalReasoning = reasoning;
         try {
           const reasoningResponse = await fetch('/api/recommendations/generate-reasoning', {
             method: 'POST',
@@ -367,21 +371,23 @@ function ItemDetail({ setIsAuthenticated }) {
           if (reasoningResponse.ok) {
             const reasoningData = await reasoningResponse.json();
             if (reasoningData.reasoning) {
-              // Update UI with LLM reasoning
-              setItem(prev => ({ ...prev, recommendation_reasoning: reasoningData.reasoning }));
-              // Persist the LLM reasoning
+              finalReasoning = reasoningData.reasoning;
+              // Persist LLM reasoning
               await fetch(`/api/items/${id}`, {
                 method: 'PUT',
                 headers: {
                   'Authorization': `Bearer ${token}`,
                   'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ recommendationReasoning: reasoningData.reasoning })
+                body: JSON.stringify({ recommendationReasoning: finalReasoning })
               });
             }
           }
         } catch (err) {
           console.error('Error fetching LLM reasoning:', err);
+        } finally {
+          setItem(prev => ({ ...prev, recommendation_reasoning: finalReasoning }));
+          setGeneratingReasoning(false);
         }
       } else {
         alert('Error saving changes. Please try again.');
@@ -675,10 +681,16 @@ function ItemDetail({ setIsAuthenticated }) {
                   <h2>Recommendation</h2>
                 </div>
 
-                {item.recommendation_reasoning && (
+                {(item.recommendation_reasoning || generatingReasoning) && (
                   <div className="reasoning-box">
                     <h3>Why This Makes Sense</h3>
-                    <p>{item.recommendation_reasoning}</p>
+                    {generatingReasoning ? (
+                      <p className="status-analyzing">
+                        Generating personalized explanation...
+                      </p>
+                    ) : (
+                      <p>{item.recommendation_reasoning}</p>
+                    )}
                   </div>
                 )}
               </div>

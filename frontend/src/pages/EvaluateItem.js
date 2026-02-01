@@ -317,13 +317,14 @@ function EvaluateItem({ setIsAuthenticated }) {
         const result = await response.json();
         setRecommendation({
           type: recommendationType,
-          reasoning: reasoning,
+          reasoning: null,
           itemId: result.item.id
         });
         setLoading(false);
 
-        // Try to get LLM-generated reasoning (non-blocking upgrade)
+        // Try to get LLM-generated reasoning, fall back to hardcoded
         setGeneratingReasoning(true);
+        let finalReasoning = reasoning;
         try {
           const reasoningResponse = await fetch('/api/recommendations/generate-reasoning', {
             method: 'POST',
@@ -349,21 +350,22 @@ function EvaluateItem({ setIsAuthenticated }) {
           if (reasoningResponse.ok) {
             const reasoningData = await reasoningResponse.json();
             if (reasoningData.reasoning) {
-              setRecommendation(prev => ({ ...prev, reasoning: reasoningData.reasoning }));
-              // Update the saved item with LLM reasoning
+              finalReasoning = reasoningData.reasoning;
+              // Persist LLM reasoning to the saved item
               await fetch(`/api/items/${result.item.id}`, {
                 method: 'PUT',
                 headers: {
                   'Authorization': `Bearer ${token}`,
                   'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ recommendationReasoning: reasoningData.reasoning })
+                body: JSON.stringify({ recommendationReasoning: finalReasoning })
               });
             }
           }
         } catch (err) {
           console.error('Error fetching LLM reasoning:', err);
         } finally {
+          setRecommendation(prev => ({ ...prev, reasoning: finalReasoning }));
           setGeneratingReasoning(false);
         }
       } else {
@@ -437,11 +439,12 @@ function EvaluateItem({ setIsAuthenticated }) {
 
             <div className="reasoning-box">
               <h3>Why This Makes Sense</h3>
-              <p>{recommendation.reasoning}</p>
-              {generatingReasoning && (
-                <p className="status-analyzing" style={{ marginTop: '8px', fontSize: '0.9em' }}>
+              {generatingReasoning ? (
+                <p className="status-analyzing">
                   Generating personalized explanation...
                 </p>
+              ) : (
+                <p>{recommendation.reasoning}</p>
               )}
             </div>
 
