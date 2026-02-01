@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Declutter Assistant - Development Roadmap</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 0.5rem;
+            font-size: 2.5rem;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .complete { color: #10b981; }
+        .in-progress { color: #f59e0b; }
+        .planned { color: #3b82f6; }
+        .blocked { color: #ef4444; }
+
+        .filters {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .filter-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .filter-btn {
+            padding: 0.75rem 1.5rem;
+            border: 2px solid #e5e7eb;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .filter-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .filter-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .roadmap-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #1f2937;
+        }
+
+        .progress-bar {
+            flex: 1;
+            max-width: 300px;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-left: 2rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #10b981, #059669);
+            transition: width 0.5s ease;
+        }
+
+        .feature-grid {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .feature-card {
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1.5rem;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .feature-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .feature-card.complete {
+            border-left: 4px solid #10b981;
+            background: #f0fdf4;
+        }
+
+        .feature-card.in-progress {
+            border-left: 4px solid #f59e0b;
+            background: #fffbeb;
+        }
+
+        .feature-card.planned {
+            border-left: 4px solid #3b82f6;
+            background: #eff6ff;
+        }
+
+        .feature-card.blocked {
+            border-left: 4px solid #ef4444;
+            background: #fef2f2;
+        }
+
+        .feature-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 0.75rem;
+        }
+
+        .feature-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #1f2937;
+        }
+
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-complete {
+            background: #10b981;
+            color: white;
+        }
+
+        .status-in-progress {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .status-planned {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .status-blocked {
+            background: #ef4444;
+            color: white;
+        }
+
+        .feature-description {
+            color: #6b7280;
+            margin-bottom: 0.75rem;
+            line-height: 1.5;
+        }
+
+        .feature-meta {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            font-size: 0.85rem;
+            color: #9ca3af;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .legend {
+            display: flex;
+            gap: 2rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 1.75rem;
+            }
+
+            .stats {
+                grid-template-columns: 1fr;
+            }
+
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .progress-bar {
+                margin-left: 0;
+                margin-top: 1rem;
+                width: 100%;
+                max-width: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏠 Declutter Assistant - Development Roadmap</h1>
+            <p class="subtitle">Your path from MVP to multi-million dollar business</p>
+        </header>
+
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-number complete">24</div>
+                <div class="stat-label">Complete</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number in-progress">3</div>
+                <div class="stat-label">In Progress</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number planned">12</div>
+                <div class="stat-label">Planned</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" style="color: #667eea;">62%</div>
+                <div class="stat-label">Overall Progress</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #10b981;"></div>
+                    <span>Complete - Production Ready</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #f59e0b;"></div>
+                    <span>In Progress - Actively Working</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #3b82f6;"></div>
+                    <span>Planned - On Roadmap</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #ef4444;"></div>
+                    <span>Blocked - Needs Attention</span>
+                </div>
+            </div>
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="all">All Features</button>
+                <button class="filter-btn" data-filter="complete">✓ Complete</button>
+                <button class="filter-btn" data-filter="in-progress">⚡ In Progress</button>
+                <button class="filter-btn" data-filter="planned">📋 Planned</button>
+                <button class="filter-btn" data-filter="core">🎯 Core Platform</button>
+                <button class="filter-btn" data-filter="insurance">🏢 Insurance Features</button>
+                <button class="filter-btn" data-filter="moving">📦 Moving Features</button>
+                <button class="filter-btn" data-filter="infrastructure">🚀 Infrastructure</button>
+            </div>
+        </div>
+
+        <!-- Core Platform Features -->
+        <div class="roadmap-section">
+            <div class="section-header">
+                <div class="section-title">🎯 Core Platform Features</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 95%;"></div>
+                </div>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">User Authentication & Authorization</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        JWT-based authentication, password reset, email verification, role-based access control (Admin/User)
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">🔍 Found in: /backend/server.js</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">User Approval System</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Admin approval required for new accounts, automated email notifications on approval/rejection
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">🔍 Found in: Admin Panel</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Personality Profiles</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        10 personality types (Minimalist, Maximalist, Sentimental, etc.) to customize AI recommendations
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">🎨 Types: 10</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Item Management System</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Full CRUD for items, image uploads, household member attribution, multi-criteria data collection
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">💾 Database: PostgreSQL</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">AI-Powered Recommendations</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Smart recommendations (Keep, Sell, Donate, Storage, Discard) based on usage, condition, sentimental value, space constraints
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">🤖 Engine: Custom Algorithm + Claude API</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">User Can Modify Recommendations</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Users can override AI suggestions and record their actual decision on each item
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">🎯 UX: One-click override</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Progress Dashboard</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Track decluttering progress, view statistics, see completion rates by category
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">📊 Metrics: Multiple</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Dark Mode & Theming</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Light and dark theme support with user preference persistence (Terracotta & Sage color scheme)
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">🎨 Branding: Preserved original colors</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Features -->
+        <div class="roadmap-section">
+            <div class="section-header">
+                <div class="section-title">👑 Admin Panel & Management</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 100%;"></div>
+                </div>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">User Management Dashboard</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        View all users, approve/reject accounts, manage roles, search and filter users
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Email Template Management</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Customizable email templates for welcome, approval, rejection, password reset emails
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">📧 Service: Nodemailer</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Announcement System</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Broadcast announcements to all users or specific segments
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Category Management</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Create, edit, delete, and organize item categories
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Recommendation Tuning</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Adjust recommendation algorithm weights and scoring for different personality types
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">⚙️ Customizable weights</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">A/B Testing Framework</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Compare different recommendation strategies and track conversion rates
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Analytics Dashboard</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Item trends, user activity metrics, recommendation acceptance rates, API usage monitoring
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">📈 Real-time metrics</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">API Cost Monitoring</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Track Anthropic API usage and costs to manage budget
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">💰 Budget alerts available</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Infrastructure & Deployment -->
+        <div class="roadmap-section">
+            <div class="section-header">
+                <div class="section-title">🚀 Infrastructure & Deployment</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 45%;"></div>
+                </div>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card complete" data-category="infrastructure" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Docker Containerization</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Multi-stage Docker builds, docker-compose setup, published to Docker Hub (thunderdanp/declutter)
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: Latest</div>
+                        <div class="meta-item">🐳 Image: thunderdanp/declutter:latest</div>
+                    </div>
+                </div>
+
+                <div class="feature-card complete" data-category="infrastructure" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Synology Deployment</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        Currently running on personal Synology NAS with reverse proxy
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">⚠️ Not suitable for enterprise demos</div>
+                    </div>
+                </div>
+
+                <div class="feature-card in-progress" data-category="infrastructure" data-status="in-progress">
+                    <div class="feature-header">
+                        <div class="feature-title">Cloud Migration to Render</div>
+                        <span class="status-badge status-in-progress">In Progress</span>
+                    </div>
+                    <div class="feature-description">
+                        Full migration plan documented - move from Synology to professional cloud hosting (Render.com)
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📋 Status: Plan ready, not started</div>
+                        <div class="meta-item">💰 Cost: ~$35/month</div>
+                        <div class="meta-item">⏱️ Timeline: 1-2 weeks part-time</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="infrastructure" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Production Database Setup</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        PostgreSQL on Render with automated backups, SSL connections, and proper scaling
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📋 Dependency: Cloud migration</div>
+                        <div class="meta-item">💰 Cost: $7-20/month</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="infrastructure" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Custom Domain & SSL</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Professional domain (e.g., declutterassistant.com) with automatic HTTPS
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📋 Dependency: Cloud migration</div>
+                        <div class="meta-item">💰 Cost: ~$12/year domain</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="infrastructure" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">CI/CD Pipeline</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Automated deployment from GitHub main/production branch
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📋 Dependency: Cloud migration complete</div>
+                        <div class="meta-item">🔧 Tool: Render auto-deploy</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="infrastructure" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Monitoring & Alerting</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Uptime monitoring, error tracking, performance metrics
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">🔧 Tools: UptimeRobot (free) + Render metrics</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Insurance Market Features -->
+        <div class="roadmap-section">
+            <div class="section-header">
+                <div class="section-title">🏢 Insurance Market Features</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 10%;"></div>
+                </div>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card in-progress" data-category="insurance" data-status="in-progress">
+                    <div class="feature-header">
+                        <div class="feature-title">Home Inventory Documentation</div>
+                        <span class="status-badge status-in-progress">In Progress</span>
+                    </div>
+                    <div class="feature-description">
+                        Professional home inventory reports for insurance claims - core functionality exists, needs insurance-specific formatting
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📋 Status: Core done, needs formatting</div>
+                        <div class="meta-item">💼 Target: $360K Year 1 revenue</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="insurance" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Item Value Estimation</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        AI-powered value estimates for items based on condition, age, brand, market data
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">🎯 Critical for insurance market</div>
+                        <div class="meta-item">💡 Could integrate pricing APIs</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="insurance" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">PDF Export for Claims</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Export professional PDF reports formatted for insurance claims submission
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">🎯 Critical for insurance market</div>
+                        <div class="meta-item">📄 Format: Industry-standard claim docs</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="insurance" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Receipt & Document Storage</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Attach purchase receipts, warranties, appraisals to items for claim documentation
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">💡 Could use Claude for receipt OCR</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="insurance" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Insurance API Integration</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        White-label integration for insurance companies to embed in their portals
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">🎯 Key to $1/month per policyholder model</div>
+                        <div class="meta-item">📊 Target: 50K policyholders = $600K/year</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="insurance" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Claims Cost Savings Analytics</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Dashboard showing insurers how much they save per claim ($500-1,500) with proper documentation
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">💼 Sales tool for insurance companies</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Moving Market Features -->
+        <div class="roadmap-section">
+            <div class="section-header">
+                <div class="section-title">📦 Moving Market Features</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 5%;"></div>
+                </div>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card planned" data-category="moving" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Volume Estimation</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Calculate total volume of items in cubic feet for moving truck sizing
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">🎯 Critical for moving companies</div>
+                        <div class="meta-item">💡 Use AI to estimate item dimensions</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="moving" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Room-by-Room Inventory</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Organize items by room for packing and unpacking workflow
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📦 Helps movers plan</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="moving" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Packing List Generator</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Auto-generate packing lists and box labels from inventory
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📋 Printable lists per room</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="moving" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Moving Company Integration</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        API for moving companies to access customer inventories for accurate quotes
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">💼 Revenue: $15-25 per move</div>
+                        <div class="meta-item">📊 Target: $156K Year 1</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="moving" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Weight Estimation</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        AI-powered weight estimates for pricing calculations
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">💡 Based on item type and dimensions</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="moving" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Pre-Move Decluttering Flow</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Guided workflow to declutter before moving (saves money on movers)
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">🎯 Unique value proposition</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Individual User Features -->
+        <div class="roadmap-section">
+            <div class="section-header">
+                <div class="section-title">👤 Individual User Growth</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: 20%;"></div>
+                </div>
+            </div>
+            <div class="feature-grid">
+                <div class="feature-card complete" data-category="core" data-status="complete">
+                    <div class="feature-header">
+                        <div class="feature-title">Subscription Ready</div>
+                        <span class="status-badge status-complete">Complete</span>
+                    </div>
+                    <div class="feature-description">
+                        User management system supports tiered access (ready for subscription integration)
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📅 Completed: v3.0</div>
+                        <div class="meta-item">💰 Target: $9.99/month or $99/year</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="core" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Stripe Payment Integration</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Connect Stripe for subscription billing ($9.99/month or $99/year)
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">💡 Priority after cloud migration</div>
+                        <div class="meta-item">📊 Revenue target: $60K Year 1</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="core" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Public Landing Page</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Marketing website separate from app with SEO, pricing, features
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">🎯 Critical for individual user acquisition</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="core" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Content Marketing System</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Blog, guides, videos on decluttering to drive organic traffic
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">📈 SEO strategy for user growth</div>
+                    </div>
+                </div>
+
+                <div class="feature-card planned" data-category="core" data-status="planned">
+                    <div class="feature-header">
+                        <div class="feature-title">Referral Program</div>
+                        <span class="status-badge status-planned">Planned</span>
+                    </div>
+                    <div class="feature-description">
+                        Give users free months for referring friends
+                    </div>
+                    <div class="feature-meta">
+                        <div class="meta-item">💡 Viral growth mechanism</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // ROADMAP STATE MANAGEMENT
+        // ============================================
+        
+        class RoadmapState {
+            constructor() {
+                this.features = new Map();
+                this.loadFromDOM();
+                this.loadFromLocalStorage();
+            }
+
+            loadFromDOM() {
+                // Load all features from the current HTML
+                document.querySelectorAll('.feature-card').forEach(card => {
+                    const id = this.generateId(card.querySelector('.feature-title').textContent);
+                    card.dataset.featureId = id;
+                    
+                    if (!this.features.has(id)) {
+                        this.features.set(id, {
+                            id: id,
+                            title: card.querySelector('.feature-title').textContent,
+                            description: card.querySelector('.feature-description').textContent.trim(),
+                            status: card.dataset.status,
+                            category: card.dataset.category,
+                            notes: '',
+                            lastUpdated: new Date().toISOString()
+                        });
+                    }
+                });
+            }
+
+            loadFromLocalStorage() {
+                const saved = localStorage.getItem('declutter-roadmap-state');
+                if (saved) {
+                    try {
+                        const data = JSON.parse(saved);
+                        // Merge saved data with current features
+                        data.forEach(feature => {
+                            if (this.features.has(feature.id)) {
+                                const current = this.features.get(feature.id);
+                                this.features.set(feature.id, {
+                                    ...current,
+                                    status: feature.status,
+                                    notes: feature.notes || '',
+                                    lastUpdated: feature.lastUpdated
+                                });
+                            }
+                        });
+                        this.applyToDOM();
+                    } catch (e) {
+                        console.error('Error loading saved state:', e);
+                    }
+                }
+            }
+
+            save() {
+                const data = Array.from(this.features.values());
+                localStorage.setItem('declutter-roadmap-state', JSON.stringify(data));
+            }
+
+            updateFeature(id, updates) {
+                if (this.features.has(id)) {
+                    const feature = this.features.get(id);
+                    this.features.set(id, {
+                        ...feature,
+                        ...updates,
+                        lastUpdated: new Date().toISOString()
+                    });
+                    this.save();
+                    this.applyToDOM();
+                }
+            }
+
+            applyToDOM() {
+                this.features.forEach(feature => {
+                    const card = document.querySelector(`[data-feature-id="${feature.id}"]`);
+                    if (card) {
+                        // Update status
+                        card.dataset.status = feature.status;
+                        card.className = `feature-card ${feature.status}`;
+                        
+                        // Update badge
+                        const badge = card.querySelector('.status-badge');
+                        badge.className = `status-badge status-${feature.status}`;
+                        badge.textContent = this.getStatusLabel(feature.status);
+                    }
+                });
+            }
+
+            getStatusLabel(status) {
+                const labels = {
+                    'complete': 'Complete',
+                    'in-progress': 'In Progress',
+                    'planned': 'Planned',
+                    'blocked': 'Blocked'
+                };
+                return labels[status] || status;
+            }
+
+            generateId(title) {
+                return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            }
+
+            export() {
+                return JSON.stringify(Array.from(this.features.values()), null, 2);
+            }
+
+            import(jsonString) {
+                try {
+                    const data = JSON.parse(jsonString);
+                    data.forEach(feature => {
+                        if (this.features.has(feature.id)) {
+                            this.updateFeature(feature.id, feature);
+                        }
+                    });
+                    alert('Import successful! Your edits have been merged.');
+                } catch (e) {
+                    alert('Error importing data: ' + e.message);
+                }
+            }
+        }
+
+        // Initialize state
+        const roadmapState = new RoadmapState();
+
+        // ============================================
+        // EDIT FUNCTIONALITY
+        // ============================================
+
+        // Click card to edit status
+        document.querySelectorAll('.feature-card').forEach(card => {
+            card.addEventListener('click', (e) => {
+                if (e.target.classList.contains('status-badge')) {
+                    cycleStatus(card);
+                } else {
+                    showEditModal(card);
+                }
+            });
+        });
+
+        function cycleStatus(card) {
+            const id = card.dataset.featureId;
+            const currentStatus = card.dataset.status;
+            const statuses = ['planned', 'in-progress', 'complete', 'blocked'];
+            const currentIndex = statuses.indexOf(currentStatus);
+            const nextStatus = statuses[(currentIndex + 1) % statuses.length];
+            
+            roadmapState.updateFeature(id, { status: nextStatus });
+            updateStats();
+            
+            // Visual feedback
+            card.style.transform = 'scale(1.05)';
+            setTimeout(() => card.style.transform = '', 200);
+        }
+
+        function showEditModal(card) {
+            const id = card.dataset.featureId;
+            const feature = roadmapState.features.get(id);
+            
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+                padding: 2rem;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: white; padding: 2rem; border-radius: 12px; max-width: 600px; width: 100%;">
+                    <h2 style="margin-bottom: 1rem; color: #667eea;">${feature.title}</h2>
+                    <p style="color: #666; margin-bottom: 1.5rem;">${feature.description}</p>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Status:</label>
+                        <select id="edit-status" style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem;">
+                            <option value="planned" ${feature.status === 'planned' ? 'selected' : ''}>📋 Planned</option>
+                            <option value="in-progress" ${feature.status === 'in-progress' ? 'selected' : ''}>⚡ In Progress</option>
+                            <option value="complete" ${feature.status === 'complete' ? 'selected' : ''}>✓ Complete</option>
+                            <option value="blocked" ${feature.status === 'blocked' ? 'selected' : ''}>⚠️ Blocked</option>
+                        </select>
+                    </div>
+                    
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Notes:</label>
+                        <textarea id="edit-notes" style="width: 100%; padding: 0.75rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 1rem; min-height: 100px; font-family: inherit;">${feature.notes || ''}</textarea>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                        <button id="edit-cancel" style="padding: 0.75rem 1.5rem; border: 2px solid #e5e7eb; background: white; border-radius: 8px; cursor: pointer; font-weight: 600;">Cancel</button>
+                        <button id="edit-save" style="padding: 0.75rem 1.5rem; border: none; background: #667eea; color: white; border-radius: 8px; cursor: pointer; font-weight: 600;">Save Changes</button>
+                    </div>
+                    
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; font-size: 0.85rem; color: #9ca3af;">
+                        Last updated: ${new Date(feature.lastUpdated).toLocaleString()}
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            modal.querySelector('#edit-cancel').addEventListener('click', () => modal.remove());
+            modal.querySelector('#edit-save').addEventListener('click', () => {
+                const newStatus = modal.querySelector('#edit-status').value;
+                const newNotes = modal.querySelector('#edit-notes').value;
+                
+                roadmapState.updateFeature(id, {
+                    status: newStatus,
+                    notes: newNotes
+                });
+                
+                updateStats();
+                modal.remove();
+            });
+            
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.remove();
+            });
+        }
+
+        // ============================================
+        // EXPORT/IMPORT
+        // ============================================
+
+        function exportData() {
+            const data = roadmapState.export();
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `declutter-roadmap-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    roadmapState.import(event.target.result);
+                    updateStats();
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // Add export/import buttons
+        const filters = document.querySelector('.filters');
+        const exportImportDiv = document.createElement('div');
+        exportImportDiv.style.cssText = 'margin-top: 1rem; padding-top: 1rem; border-top: 2px solid #e5e7eb; display: flex; gap: 1rem;';
+        exportImportDiv.innerHTML = `
+            <button onclick="exportData()" style="padding: 0.75rem 1.5rem; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                📥 Export Progress
+            </button>
+            <button onclick="importData()" style="padding: 0.75rem 1.5rem; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                📤 Import Progress
+            </button>
+            <button onclick="if(confirm('Clear all saved progress?')) { localStorage.removeItem('declutter-roadmap-state'); location.reload(); }" style="padding: 0.75rem 1.5rem; border: 2px solid #ef4444; background: white; color: #ef4444; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                🗑️ Reset All
+            </button>
+        `;
+        filters.appendChild(exportImportDiv);
+
+        // ============================================
+        // FILTER FUNCTIONALITY
+        // ============================================
+
+        const filterButtons = document.querySelectorAll('.filter-btn');
+        const featureCards = document.querySelectorAll('.feature-card');
+
+        filterButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                filterButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+
+                const filter = button.dataset.filter;
+
+                featureCards.forEach(card => {
+                    const category = card.dataset.category;
+                    const status = card.dataset.status;
+
+                    if (filter === 'all') {
+                        card.style.display = 'block';
+                    } else if (filter === 'complete' || filter === 'in-progress' || filter === 'planned') {
+                        card.style.display = status === filter ? 'block' : 'none';
+                    } else {
+                        card.style.display = category === filter ? 'block' : 'none';
+                    }
+                });
+
+                updateStats();
+            });
+        });
+
+        function updateStats() {
+            const visibleCards = Array.from(featureCards).filter(card => card.style.display !== 'none');
+            const complete = visibleCards.filter(card => card.dataset.status === 'complete').length;
+            const inProgress = visibleCards.filter(card => card.dataset.status === 'in-progress').length;
+            const planned = visibleCards.filter(card => card.dataset.status === 'planned').length;
+            const total = visibleCards.length;
+            const percentage = total > 0 ? Math.round((complete / total) * 100) : 0;
+
+            document.querySelector('.stat-number.complete').textContent = complete;
+            document.querySelector('.stat-number.in-progress').textContent = inProgress;
+            document.querySelector('.stat-number.planned').textContent = planned;
+            document.querySelectorAll('.stat-number')[3].textContent = percentage + '%';
+        }
+
+        // Initial stats
+        updateStats();
+        
+        // Add usage hint
+        const hint = document.createElement('div');
+        hint.style.cssText = 'background: #eff6ff; border-left: 4px solid #3b82f6; padding: 1rem; border-radius: 8px; margin-bottom: 2rem; color: #1e40af;';
+        hint.innerHTML = `
+            <strong>💡 How to use:</strong> Click any feature card to edit status and add notes. 
+            Click the status badge to quick-cycle through statuses. 
+            Export your progress before Claude regenerates the roadmap, then import it back to merge changes.
+        `;
+        document.querySelector('.stats').insertAdjacentElement('afterend', hint);
+    </script>
+</body>
+</html>

@@ -181,9 +181,10 @@ docker buildx build --platform linux/amd64 -t thunderdanp/declutter:latest --pus
 
 ---
 
-## 📖 API Documentation
+## 📖 Documentation
 
-Full API documentation available at [docs/API.md](docs/API.md).
+- **[Interactive Development Roadmap](https://thunderdanp.github.io/declutter/roadmap.html)** — Visual overview of all features with status tracking
+- **[API Reference](docs/API.md)** — Full backend API documentation
 
 ### Key Endpoints
 
@@ -250,7 +251,8 @@ declutter/
 │   └── backend/             # Synced backend
 │
 ├── docs/                    # Documentation
-│   └── API.md               # API reference
+│   ├── API.md               # API reference
+│   └── roadmap.html         # Interactive development roadmap
 │
 └── docker-compose.yml       # Development compose file
 ```
