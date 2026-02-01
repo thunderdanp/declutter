@@ -131,58 +131,49 @@ const pool = new Pool({
 // Initialize email service
 const emailService = new EmailService(pool);
 
-// Run idempotent migrations for multi-LLM provider support
+// Run migrations from migrations/ directory, tracking applied ones in schema_migrations
 const runMigrations = async (): Promise<void> => {
   try {
     await pool.query(`
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_provider VARCHAR(50) DEFAULT 'anthropic';
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS llm_api_key TEXT;
-      UPDATE users SET llm_api_key = anthropic_api_key, llm_provider = 'anthropic'
-        WHERE anthropic_api_key IS NOT NULL AND llm_api_key IS NULL;
-      ALTER TABLE api_usage_logs ADD COLUMN IF NOT EXISTS provider VARCHAR(50) DEFAULT 'anthropic';
-      INSERT INTO system_settings (setting_key, setting_value) VALUES
-        ('llm_provider', 'anthropic'),
-        ('openai_api_key', ''),
-        ('google_api_key', ''),
-        ('ollama_base_url', 'http://localhost:11434')
-      ON CONFLICT (setting_key) DO NOTHING;
-      INSERT INTO system_settings (setting_key, setting_value) VALUES
-        ('recaptcha_site_key', ''),
-        ('recaptcha_secret_key', '')
-      ON CONFLICT (setting_key) DO NOTHING;
-      INSERT INTO system_settings (setting_key, setting_value) VALUES
-        ('recaptcha_project_id', ''),
-        ('recaptcha_score_threshold', '0.5')
-      ON CONFLICT (setting_key) DO NOTHING;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(64);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMP;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT TRUE;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token VARCHAR(64);
-      ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires TIMESTAMP;
-      INSERT INTO system_settings (setting_key, setting_value)
-        VALUES ('require_email_verification', 'false')
-        ON CONFLICT (setting_key) DO NOTHING;
-      INSERT INTO email_templates (name, subject, body, description, is_system, trigger_event)
-        VALUES ('account_approved', 'Your Account Has Been Approved!', 'Hello {{firstName}},
-
-Great news! Your Declutter Assistant account has been approved. You can now log in and start organizing your life.
-
-Get started by:
-1. Creating your personality profile
-2. Adding items to evaluate
-3. Following AI-powered recommendations
-
-Best regards,
-The Declutter Team', 'Sent when an admin approves a user account', true, 'account_approved')
-        ON CONFLICT (name) DO NOTHING;
-      INSERT INTO system_settings (setting_key, setting_value)
-        VALUES ('analysis_prompt', '')
-        ON CONFLICT (setting_key) DO NOTHING;
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename VARCHAR(255) PRIMARY KEY,
+        applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
     `);
-    console.log('LLM provider migrations applied successfully');
+
+    const migrationsDir = path.join(__dirname, '..', 'migrations');
+    if (!fsSync.existsSync(migrationsDir)) {
+      console.log('No migrations directory found, skipping');
+      return;
+    }
+
+    const files = fsSync.readdirSync(migrationsDir)
+      .filter((f: string) => f.endsWith('.sql'))
+      .sort();
+
+    if (files.length === 0) return;
+
+    const applied = await pool.query('SELECT filename FROM schema_migrations');
+    const appliedSet = new Set(applied.rows.map((r: { filename: string }) => r.filename));
+
+    for (const file of files) {
+      if (appliedSet.has(file)) continue;
+
+      const sql = fsSync.readFileSync(path.join(migrationsDir, file), 'utf-8');
+      try {
+        await pool.query('BEGIN');
+        await pool.query(sql);
+        await pool.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
+        await pool.query('COMMIT');
+        console.log(`Migration applied: ${file}`);
+      } catch (err) {
+        await pool.query('ROLLBACK');
+        console.error(`Migration failed: ${file}`, (err as Error).message);
+        break;
+      }
+    }
   } catch (err) {
-    console.log('LLM provider migration skipped (tables may not exist yet):', (err as Error).message);
+    console.log('Migration runner error:', (err as Error).message);
   }
 };
 
@@ -1854,9 +1845,14 @@ app.post('/api/admin/categories', authenticateToken, requireAdmin, [body('name')
     const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     if (is_default) { await pool.query('UPDATE categories SET is_default = false WHERE is_default = true'); }
 
+    const newSortOrder = sort_order || 0;
+    if (newSortOrder > 0) {
+      await pool.query('UPDATE categories SET sort_order = sort_order + 1 WHERE sort_order >= $1', [newSortOrder]);
+    }
+
     const result = await pool.query(
       `INSERT INTO categories (name, slug, display_name, icon, color, sort_order, is_default) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [name, slug, display_name, icon || null, color || null, sort_order || 0, is_default || false]
+      [name, slug, display_name, icon || null, color || null, newSortOrder, is_default || false]
     );
     const category = result.rows[0];
     await logActivity({ userId: req.user!.userId, action: 'category_created', actionType: 'admin', resourceType: 'category', resourceId: category.id, details: { name: category.name, displayName: category.display_name }, req });
@@ -1872,11 +1868,16 @@ app.put('/api/admin/categories/:id', authenticateToken, requireAdmin, async (req
     const { name, display_name, icon, color, sort_order, is_default } = req.body;
     const slug = name ? name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') : undefined;
 
-    const currentResult = await pool.query('SELECT slug FROM categories WHERE id = $1', [req.params.id]);
+    const currentResult = await pool.query('SELECT slug, sort_order FROM categories WHERE id = $1', [req.params.id]);
     if (currentResult.rows.length === 0) { res.status(404).json({ error: 'Category not found' }); return; }
     const oldSlug = currentResult.rows[0].slug;
+    const oldSortOrder = currentResult.rows[0].sort_order;
 
     if (is_default) { await pool.query('UPDATE categories SET is_default = false WHERE is_default = true AND id != $1', [req.params.id]); }
+
+    if (sort_order != null && sort_order !== oldSortOrder) {
+      await pool.query('UPDATE categories SET sort_order = sort_order + 1 WHERE sort_order >= $1 AND id != $2', [sort_order, req.params.id]);
+    }
 
     const result = await pool.query(
       `UPDATE categories SET name = COALESCE($1, name), slug = COALESCE($2, slug), display_name = COALESCE($3, display_name), icon = COALESCE($4, icon), color = COALESCE($5, color), sort_order = COALESCE($6, sort_order), is_default = COALESCE($7, is_default) WHERE id = $8 RETURNING *`,
