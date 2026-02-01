@@ -16,6 +16,7 @@ import { Pool } from 'pg';
 import { body, validationResult } from 'express-validator';
 import * as llmProviders from './llmProviders';
 import EmailService from './emailService';
+import AISupportService from './aiSupportService';
 import crypto from 'crypto';
 import { RecaptchaEnterpriseServiceClient } from '@google-cloud/recaptcha-enterprise';
 import * as fsSync from 'fs';
@@ -130,6 +131,9 @@ const pool = new Pool({
 
 // Initialize email service
 const emailService = new EmailService(pool);
+
+// Initialize AI support service
+const aiSupportService = new AISupportService(pool);
 
 // Run migrations from migrations/ directory, tracking applied ones in schema_migrations
 const runMigrations = async (): Promise<void> => {
@@ -2464,6 +2468,76 @@ app.get('/api/admin/system-health', authenticateToken, requireAdmin, async (req:
 
     res.json({ timestamp, overallStatus, database: { connected: dbConnected, latencyMs: dbLatencyMs, ...poolStats, databaseSize, databaseSizeBytes, tableCounts, tableSizes }, endpoints, storage: { uploads: uploadsStats }, errors: errorStats });
   } catch (error) { console.error('System health error:', error); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ==================== SUPPORT TICKET ROUTES ====================
+
+// Submit a support ticket
+app.post('/api/support/submit', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { subject, message } = req.body;
+
+    if (!subject || !subject.trim()) {
+      res.status(400).json({ error: 'Subject is required' });
+      return;
+    }
+    if (!message || !message.trim()) {
+      res.status(400).json({ error: 'Message is required' });
+      return;
+    }
+
+    const ticket = await aiSupportService.createTicket(req.user!.userId, subject.trim(), message.trim());
+
+    // Send email notifications
+    if (ticket.aiMatched) {
+      // Send AI response to user
+      const userResult = await pool.query('SELECT email, first_name FROM users WHERE id = $1', [req.user!.userId]);
+      if (userResult.rows.length > 0) {
+        const user = userResult.rows[0];
+        await emailService.sendEmail(
+          user.email,
+          `Support Ticket #${ticket.id}: ${subject}`,
+          `Hi ${user.first_name || 'there'},\n\nThank you for contacting support. Our system found an answer that may help:\n\n${ticket.aiResponse}\n\nIf this doesn't resolve your issue, an admin will follow up.\n\nNote: This is an automated response.`
+        );
+      }
+    } else {
+      // Notify admin users
+      const adminResult = await pool.query('SELECT email FROM users WHERE is_admin = true');
+      for (const admin of adminResult.rows) {
+        await emailService.sendEmail(
+          admin.email,
+          `New Support Ticket #${ticket.id}: ${subject}`,
+          `A new support ticket has been submitted that requires attention.\n\nSubject: ${subject}\nMessage: ${message}\n\nPlease log in to review and respond.`
+        );
+      }
+    }
+
+    await logActivity({
+      userId: req.user!.userId,
+      action: 'support_ticket_created',
+      actionType: 'USER',
+      resourceType: 'support_ticket',
+      resourceId: ticket.id,
+      details: { subject, aiMatched: ticket.aiMatched },
+      req
+    });
+
+    res.json({ ticket: { id: ticket.id, aiMatched: ticket.aiMatched, aiResponse: ticket.aiResponse } });
+  } catch (error) {
+    console.error('Error creating support ticket:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get current user's support tickets
+app.get('/api/support/my-tickets', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const tickets = await aiSupportService.getTicketsForUser(req.user!.userId);
+    res.json({ tickets });
+  } catch (error) {
+    console.error('Error fetching support tickets:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // Start server

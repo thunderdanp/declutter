@@ -27,6 +27,7 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import AdminActivityLogs from './pages/AdminActivityLogs';
 import AdminSystemHealth from './pages/AdminSystemHealth';
 import HouseholdMembers from './pages/HouseholdMembers';
+import Support from './pages/Support';
 import './App.css';
 
 function App() {
@@ -125,6 +126,9 @@ function App() {
         } />
         <Route path="/household" element={
           isAuthenticated ? <HouseholdMembers setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/support" element={
+          isAuthenticated ? <Support setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/items/:id" element={
           isAuthenticated ? <ItemDetail setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
