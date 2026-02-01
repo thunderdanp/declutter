@@ -181,6 +181,74 @@ export function analyzeItem(formData, profile, settings = null) {
     }
   }
 
+  // Apply personality mode adjustments
+  if (formData.personalityMode) {
+    if (formData.personalityMode === 'marie_kondo') {
+      // Amplify sentimental factor, push toward donating non-joy items
+      if (formData.sentimental === 'none' || formData.sentimental === 'no') {
+        scores.donate += 2;
+      }
+    } else if (formData.personalityMode === 'minimalist') {
+      scores.discard += 1;
+      scores.donate += 1;
+      scores.keep -= 1;
+      scores.storage -= 1;
+    } else if (formData.personalityMode === 'practical_parent') {
+      // Penalize rarely-used items more heavily
+      if (formData.used === 'no' || formData.used === 'rarely') {
+        scores.donate += 1;
+        scores.sell += 1;
+      }
+    }
+  }
+
+  // Apply context-aware adjustments
+  if (formData.lastUsedTimeframe) {
+    if (formData.lastUsedTimeframe === '2+_years' || formData.lastUsedTimeframe === 'never_used') {
+      scores.donate += 2;
+      scores.sell += 1;
+      scores.keep -= 1;
+    } else if (formData.lastUsedTimeframe === '1-2_years') {
+      scores.storage += 1;
+      scores.donate += 1;
+    } else if (formData.lastUsedTimeframe === 'last_month') {
+      scores.keep += 2;
+      scores.accessible += 1;
+    }
+  }
+
+  if (formData.itemCondition) {
+    if (formData.itemCondition === 'broken') {
+      scores.discard += 3;
+      scores.keep -= 2;
+      scores.sell -= 2;
+    } else if (formData.itemCondition === 'poor') {
+      scores.discard += 1;
+    }
+  }
+
+  if (formData.isSentimental) {
+    scores.keep += 2;
+    scores.discard -= 2;
+  }
+
+  if (formData.duplicateCount > 2) {
+    scores.donate += 1;
+    scores.sell += 1;
+  }
+
+  // Apply user goal adjustments
+  if (formData.userGoal) {
+    if (formData.userGoal === 'downsizing' || formData.userGoal === 'moving') {
+      scores.sell += 1;
+      scores.donate += 1;
+      scores.keep -= 1;
+    } else if (formData.userGoal === 'organizing') {
+      scores.storage += 1;
+      scores.accessible += 1;
+    }
+  }
+
   // Find the highest score
   const maxScore = Math.max(...Object.values(scores));
   const topRecommendations = Object.keys(scores).filter(key => scores[key] === maxScore);
@@ -320,58 +388,112 @@ export function analyzeItemWithDetails(formData, profile, settings = null) {
 export function generateReasoning(recommendation, formData, profile) {
   const reasons = [];
   const itemName = formData.name || 'This item';
+  const mode = formData.personalityMode || 'balanced';
 
+  // Personality-mode-aware opening lines
+  const openings = {
+    keep: {
+      marie_kondo: `${itemName} clearly sparks joy for you!`,
+      practical_parent: `${itemName} earns its spot in your home.`,
+      comedian: `${itemName} made the cut - congratulations, you get to stay!`,
+      minimalist: `${itemName} is worth keeping - and that says something.`,
+      balanced: `${itemName} appears to be something you should keep in your home.`
+    },
+    storage: {
+      marie_kondo: `Thank ${itemName} for waiting patiently - it belongs in storage for now.`,
+      practical_parent: `${itemName} doesn't need prime real estate. Storage it is.`,
+      comedian: `${itemName} is going to the bench - not cut from the team, just not starting.`,
+      minimalist: `${itemName} should be stored. Out of sight, but not gone.`,
+      balanced: `${itemName} would be best placed in storage.`
+    },
+    accessible: {
+      marie_kondo: `Keep ${itemName} close - it brings value to your daily life!`,
+      practical_parent: `${itemName} needs to be within arm's reach.`,
+      comedian: `${itemName} gets VIP access - front row seating in your home!`,
+      minimalist: `${itemName} earns accessible placement.`,
+      balanced: `${itemName} should be kept in an easily accessible location.`
+    },
+    sell: {
+      marie_kondo: `Thank ${itemName} for its service, and let it bring joy to someone else - plus a little cash for you!`,
+      practical_parent: `Time to cash in on ${itemName}. No point keeping money on the shelf.`,
+      comedian: `${itemName} is about to fund your next impulse purchase. Sell it!`,
+      minimalist: `${itemName} can go. Recoup the value and free the space.`,
+      balanced: `${itemName} is a good candidate for selling.`
+    },
+    donate: {
+      marie_kondo: `${itemName} deserves to spark joy for someone new. Donate with gratitude.`,
+      practical_parent: `${itemName} isn't working for you. Pass it to someone who'll actually use it.`,
+      comedian: `${itemName} is ready for a new adventure. Set it free via the donation bin!`,
+      minimalist: `Let ${itemName} go. Someone else will appreciate it more.`,
+      balanced: `${itemName} would make a wonderful donation.`
+    },
+    discard: {
+      marie_kondo: `Thank ${itemName} for its time in your life, then let it go with grace.`,
+      practical_parent: `${itemName} has served its purpose. Time to toss it.`,
+      comedian: `${itemName} has officially expired. Time for the great beyond (the trash).`,
+      minimalist: `${itemName} is dead weight. Remove it.`,
+      balanced: `${itemName} can be discarded.`
+    }
+  };
+
+  reasons.push(openings[recommendation]?.[mode] || openings[recommendation]?.balanced || `Our recommendation for ${itemName}: ${recommendation}.`);
+
+  // Context-specific reasons
   if (recommendation === 'keep') {
-    reasons.push(`${itemName} appears to be something you should keep in your home.`);
-    if (formData.used === 'yes') {
-      reasons.push('You use this item regularly, which shows it serves an active purpose in your life.');
-    }
-    if (formData.sentimental === 'high') {
-      reasons.push('Its strong sentimental value makes it worth holding onto.');
-    }
-    if (profile?.minimalistLevel === 'maximalist') {
-      reasons.push('Based on your personality profile, you appreciate having variety and enjoy collecting meaningful items.');
-    }
+    if (formData.used === 'yes') reasons.push('You use this item regularly, which shows it serves an active purpose in your life.');
+    if (formData.sentimental === 'high') reasons.push('Its strong sentimental value makes it worth holding onto.');
+    if (formData.isSentimental) reasons.push('The personal significance of this item adds real value beyond the practical.');
+    if (formData.lastUsedTimeframe === 'last_month') reasons.push('Recent use confirms this is part of your active rotation.');
   } else if (recommendation === 'storage') {
-    reasons.push(`${itemName} would be best placed in storage.`);
-    if (formData.used === 'rarely' || formData.used === 'no') {
-      reasons.push("You don't use this frequently enough to warrant prime real estate in your living space.");
-    }
-    if (formData.replace === 'difficult') {
-      reasons.push("This item would be hard to replace, so it's worth keeping, just not in your main living areas.");
-    }
+    if (formData.used === 'rarely' || formData.used === 'no') reasons.push("You don't use this frequently enough to warrant prime real estate in your living space.");
+    if (formData.replace === 'difficult') reasons.push("This item would be hard to replace, so it's worth keeping, just not in your main living areas.");
+    if (formData.lastUsedTimeframe === '1-2_years') reasons.push("It's been a while since you used this, but it may still have a season.");
   } else if (recommendation === 'accessible') {
-    reasons.push(`${itemName} should be kept in an easily accessible location.`);
-    if (formData.used === 'yes') {
-      reasons.push('You use this item enough that it should be easy to reach when needed.');
-    }
+    if (formData.used === 'yes') reasons.push('You use this item enough that it should be easy to reach when needed.');
   } else if (recommendation === 'sell') {
-    reasons.push(`${itemName} is a good candidate for selling.`);
-    if (formData.value === 'high' || formData.value === 'medium') {
-      reasons.push('This item has monetary value that you could recoup through selling.');
-    }
-    if (profile?.budgetPriority === 'very-important') {
-      reasons.push('Based on your profile, recouping money from items is important to you.');
-    }
+    if (formData.value === 'high' || formData.value === 'medium') reasons.push('This item has monetary value that you could recoup through selling.');
+    if (profile?.budgetPriority === 'very-important') reasons.push('Recouping money from items aligns with your financial priorities.');
+    if (formData.duplicateCount > 2) reasons.push(`You have ${formData.duplicateCount} similar items - selling extras makes sense.`);
   } else if (recommendation === 'donate') {
-    reasons.push(`${itemName} would make a wonderful donation.`);
-    if (formData.condition === 'good' || formData.condition === 'fair') {
-      reasons.push("It's in decent enough condition for someone else to use and appreciate.");
-    }
-    if (profile?.budgetPriority === 'not-important') {
-      reasons.push('Based on your profile, you prefer donating over selling, which is a generous choice.');
-    }
+    if (formData.condition === 'good' || formData.condition === 'fair') reasons.push("It's in decent enough condition for someone else to use and appreciate.");
+    if (formData.lastUsedTimeframe === '2+_years' || formData.lastUsedTimeframe === 'never_used') reasons.push("It hasn't been used in a long time - someone else could put it to good use.");
+    if (formData.duplicateCount > 2) reasons.push(`With ${formData.duplicateCount} items in this category, paring down makes room for what matters.`);
   } else if (recommendation === 'discard') {
-    reasons.push(`${itemName} can be discarded.`);
-    if (formData.condition === 'poor') {
-      reasons.push("Its poor condition means it's not suitable for donation or resale.");
-    }
-    if (profile?.minimalistLevel === 'extreme') {
-      reasons.push('As someone who values minimalism, letting go of items like this will help you achieve your goals.');
-    }
+    if (formData.condition === 'poor' || formData.itemCondition === 'broken') reasons.push("Its condition means it's not suitable for donation or resale.");
+    if (formData.lastUsedTimeframe === 'never_used') reasons.push("You've never actually used this - it's taking up space without purpose.");
+  }
+
+  // Goal-specific closer
+  if (formData.userGoal === 'downsizing') {
+    reasons.push('This aligns with your downsizing goal.');
+  } else if (formData.userGoal === 'moving') {
+    reasons.push('Less to pack means an easier move.');
   }
 
   return reasons.join(' ');
+}
+
+/**
+ * Detects emotional tone from user notes text (client-side version)
+ */
+export function detectEmotionalTone(text) {
+  if (!text || text.trim().length === 0) return 'neutral';
+
+  const lower = text.toLowerCase();
+  const sentimentalWords = ['grandmother', 'grandma', 'grandfather', 'childhood', 'memories', 'passed down', 'inherited', 'family', 'heirloom', 'wedding', 'baby', 'mother', 'father'];
+  const frustratedWords = ['stupid', 'waste', 'taking up space', 'never use', 'hate', 'junk', 'clutter', 'useless', 'broken', 'trash', 'get rid of', 'eyesore'];
+  const enthusiasticWords = ['love', 'favorite', 'perfect', 'amazing', 'beautiful', 'awesome', 'treasure', 'wonderful', 'rare', 'unique'];
+
+  let sentScore = 0, fruScore = 0, enthScore = 0;
+  for (const w of sentimentalWords) { if (lower.includes(w)) sentScore++; }
+  for (const w of frustratedWords) { if (lower.includes(w)) fruScore++; }
+  for (const w of enthusiasticWords) { if (lower.includes(w)) enthScore++; }
+
+  const max = Math.max(sentScore, fruScore, enthScore);
+  if (max === 0) return 'neutral';
+  if (sentScore >= fruScore && sentScore >= enthScore) return 'sentimental';
+  if (fruScore >= enthScore) return 'frustrated';
+  return 'enthusiastic';
 }
 
 /**

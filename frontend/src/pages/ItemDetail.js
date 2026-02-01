@@ -20,6 +20,9 @@ function ItemDetail({ setIsAuthenticated }) {
   const [profile, setProfile] = useState(null);
   const [householdMembers, setHouseholdMembers] = useState([]);
   const [selectedOwners, setSelectedOwners] = useState([]);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [showOverrideInput, setShowOverrideInput] = useState(false);
+  const [pendingDecision, setPendingDecision] = useState(null);
   const { isDark, toggleTheme } = useTheme();
   const { getCategoryBySlug } = useCategories();
 
@@ -156,7 +159,16 @@ function ItemDetail({ setIsAuthenticated }) {
   };
 
   const handleRecordDecision = async (decision) => {
+    // If decision differs from recommendation, prompt for reason
+    if (item.recommendation && decision !== item.recommendation && !showOverrideInput) {
+      setPendingDecision(decision);
+      setShowOverrideInput(true);
+      return;
+    }
+
     setSavingDecision(true);
+    const actualDecision = decision || pendingDecision;
+
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`/api/items/${id}/decision`, {
@@ -165,12 +177,37 @@ function ItemDetail({ setIsAuthenticated }) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ decision })
+        body: JSON.stringify({ decision: actualDecision })
       });
 
       if (response.ok) {
         const data = await response.json();
         setItem(data.item);
+
+        // Log override if decision differs from recommendation
+        if (item.recommendation && actualDecision !== item.recommendation) {
+          try {
+            await fetch('/api/recommendations/override', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                itemId: parseInt(id, 10),
+                aiSuggestion: item.recommendation,
+                userChoice: actualDecision,
+                overrideReason: overrideReason || null
+              })
+            });
+          } catch (err) {
+            console.error('Error logging override:', err);
+          }
+        }
+
+        setShowOverrideInput(false);
+        setPendingDecision(null);
+        setOverrideReason('');
       } else {
         alert('Error recording decision. Please try again.');
       }
@@ -180,6 +217,10 @@ function ItemDetail({ setIsAuthenticated }) {
     } finally {
       setSavingDecision(false);
     }
+  };
+
+  const handleSkipOverrideReason = () => {
+    handleRecordDecision(pendingDecision);
   };
 
   const handleClearDecision = async () => {
@@ -234,7 +275,11 @@ function ItemDetail({ setIsAuthenticated }) {
       condition: answers.condition || '',
       value: answers.value || '',
       replace: answers.replace || '',
-      space: answers.space || ''
+      space: answers.space || '',
+      lastUsedTimeframe: item.last_used_timeframe || '',
+      itemCondition: item.item_condition || '',
+      isSentimental: item.is_sentimental || false,
+      userNotes: item.user_notes || ''
     });
     setIsEditing(true);
   };
@@ -245,9 +290,10 @@ function ItemDetail({ setIsAuthenticated }) {
   };
 
   const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
     setEditData({
       ...editData,
-      [e.target.name]: e.target.value
+      [name]: type === 'checkbox' ? checked : value
     });
   };
 
@@ -286,7 +332,11 @@ function ItemDetail({ setIsAuthenticated }) {
           recommendation: recommendationType,
           recommendationReasoning: reasoning,
           answers: JSON.stringify(editData),
-          ownerIds: selectedOwners
+          ownerIds: selectedOwners,
+          lastUsedTimeframe: editData.lastUsedTimeframe || null,
+          itemCondition: editData.itemCondition || null,
+          isSentimental: editData.isSentimental,
+          userNotes: editData.userNotes || null
         })
       });
 
@@ -546,6 +596,60 @@ function ItemDetail({ setIsAuthenticated }) {
               </div>
             </div>
 
+            <div className="card">
+              <h3 className="card-title">Additional Context</h3>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>When did you last use this item?</label>
+                  <select name="lastUsedTimeframe" value={editData.lastUsedTimeframe} onChange={handleInputChange}>
+                    <option value="">Select...</option>
+                    <option value="last_month">Last month</option>
+                    <option value="last_6_months">Last 6 months</option>
+                    <option value="last_year">Last year</option>
+                    <option value="1-2_years">1-2 years ago</option>
+                    <option value="2+_years">2+ years ago</option>
+                    <option value="never_used">Never used</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Item condition</label>
+                  <select name="itemCondition" value={editData.itemCondition} onChange={handleInputChange}>
+                    <option value="">Select...</option>
+                    <option value="excellent">Excellent</option>
+                    <option value="good">Good</option>
+                    <option value="fair">Fair</option>
+                    <option value="poor">Poor</option>
+                    <option value="broken">Broken</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="checkbox-label-inline">
+                  <input
+                    type="checkbox"
+                    name="isSentimental"
+                    checked={editData.isSentimental}
+                    onChange={handleInputChange}
+                  />
+                  <span>This item has sentimental value</span>
+                </label>
+              </div>
+
+              <div className="form-group">
+                <label>Notes about this item</label>
+                <textarea
+                  name="userNotes"
+                  value={editData.userNotes}
+                  onChange={handleInputChange}
+                  placeholder="Any personal context about this item..."
+                  rows="3"
+                />
+              </div>
+            </div>
+
             <div className="edit-actions">
               <button onClick={handleSave} className="btn-save" disabled={saving}>
                 {saving ? 'Saving...' : 'Save Changes'}
@@ -607,6 +711,32 @@ function ItemDetail({ setIsAuthenticated }) {
                     >
                       Change Decision
                     </button>
+                  </div>
+                ) : showOverrideInput ? (
+                  <div className="override-input-section">
+                    <p className="override-prompt">
+                      You chose <strong>{decisionOptions.find(d => d.value === pendingDecision)?.label}</strong> instead of the recommended <strong>{decisionOptions.find(d => d.value === item.recommendation)?.label}</strong>.
+                    </p>
+                    <div className="form-group">
+                      <label>Mind sharing why? (Helps AI learn)</label>
+                      <textarea
+                        value={overrideReason}
+                        onChange={(e) => setOverrideReason(e.target.value)}
+                        placeholder="e.g., 'Too sentimental to donate', 'Found a buyer already'..."
+                        rows="2"
+                      />
+                    </div>
+                    <div className="override-actions">
+                      <button onClick={() => handleRecordDecision(pendingDecision)} className="btn btn-primary" disabled={savingDecision}>
+                        {savingDecision ? 'Saving...' : 'Submit'}
+                      </button>
+                      <button onClick={handleSkipOverrideReason} className="btn btn-secondary" disabled={savingDecision}>
+                        Skip
+                      </button>
+                      <button onClick={() => { setShowOverrideInput(false); setPendingDecision(null); }} className="btn btn-secondary" disabled={savingDecision}>
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="decision-options">

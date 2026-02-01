@@ -21,7 +21,14 @@ function EvaluateItem({ setIsAuthenticated }) {
     condition: '',
     value: '',
     replace: '',
-    space: ''
+    space: '',
+    lastUsedTimeframe: '',
+    itemCondition: '',
+    isSentimental: false,
+    userNotes: '',
+    personalityMode: '',
+    userGoal: '',
+    duplicateCount: 0
   });
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -43,7 +50,43 @@ function EvaluateItem({ setIsAuthenticated }) {
     fetchProfile();
     fetchHouseholdMembers();
     loadRecommendationSettings();
+    fetchAIPreferences();
   }, []);
+
+  const fetchAIPreferences = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/users/ai-preferences', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFormData(prev => ({
+          ...prev,
+          personalityMode: data.personalityMode || 'balanced',
+          userGoal: data.userGoal || 'general'
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching AI preferences:', error);
+    }
+  };
+
+  const fetchDuplicateCount = async (category) => {
+    if (!category) return;
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`/api/items/duplicate-count/${encodeURIComponent(category)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setFormData(prev => ({ ...prev, duplicateCount: data.count }));
+      }
+    } catch (error) {
+      console.error('Error fetching duplicate count:', error);
+    }
+  };
 
   const loadRecommendationSettings = async () => {
     const settings = await fetchRecommendationSettings();
@@ -95,10 +138,14 @@ function EvaluateItem({ setIsAuthenticated }) {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+    if (name === 'category' && value) {
+      fetchDuplicateCount(value);
+    }
   };
 
   // Resize image to target size (default 2MB max)
@@ -252,6 +299,10 @@ function EvaluateItem({ setIsAuthenticated }) {
       data.append('answers', JSON.stringify(formData));
       data.append('status', 'evaluated');
       data.append('ownerIds', JSON.stringify(selectedOwners));
+      if (formData.lastUsedTimeframe) data.append('lastUsedTimeframe', formData.lastUsedTimeframe);
+      if (formData.itemCondition) data.append('itemCondition', formData.itemCondition);
+      data.append('isSentimental', String(formData.isSentimental));
+      if (formData.userNotes) data.append('userNotes', formData.userNotes);
 
       if (image) {
         data.append('image', image);
@@ -284,7 +335,7 @@ function EvaluateItem({ setIsAuthenticated }) {
   };
 
   const resetForm = () => {
-    setFormData({
+    setFormData(prev => ({
       name: '',
       description: '',
       location: '',
@@ -294,8 +345,15 @@ function EvaluateItem({ setIsAuthenticated }) {
       condition: '',
       value: '',
       replace: '',
-      space: ''
-    });
+      space: '',
+      lastUsedTimeframe: '',
+      itemCondition: '',
+      isSentimental: false,
+      userNotes: '',
+      personalityMode: prev.personalityMode,
+      userGoal: prev.userGoal,
+      duplicateCount: 0
+    }));
     setImage(null);
     setImagePreview(null);
     setRecommendation(null);
@@ -633,6 +691,66 @@ function EvaluateItem({ setIsAuthenticated }) {
                 </label>
               </div>
             </div>
+          </div>
+
+          <div className="card">
+            <h2 className="section-heading">Additional Context</h2>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>When did you last use this item?</label>
+                <select name="lastUsedTimeframe" value={formData.lastUsedTimeframe} onChange={handleChange}>
+                  <option value="">Select...</option>
+                  <option value="last_month">Last month</option>
+                  <option value="last_6_months">Last 6 months</option>
+                  <option value="last_year">Last year</option>
+                  <option value="1-2_years">1-2 years ago</option>
+                  <option value="2+_years">2+ years ago</option>
+                  <option value="never_used">Never used</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Item condition</label>
+                <select name="itemCondition" value={formData.itemCondition} onChange={handleChange}>
+                  <option value="">Select...</option>
+                  <option value="excellent">Excellent</option>
+                  <option value="good">Good</option>
+                  <option value="fair">Fair</option>
+                  <option value="poor">Poor</option>
+                  <option value="broken">Broken</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="isSentimental"
+                  checked={formData.isSentimental}
+                  onChange={handleChange}
+                />
+                <span>This item has sentimental value</span>
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label>Notes about this item (helps AI personalize)</label>
+              <textarea
+                name="userNotes"
+                value={formData.userNotes}
+                onChange={handleChange}
+                placeholder="e.g., 'Grandmother gave this to me', 'Never got around to using it', 'My favorite kitchen tool'..."
+                rows="3"
+              />
+            </div>
+
+            {formData.duplicateCount > 1 && (
+              <div className="duplicate-badge">
+                You have {formData.duplicateCount} items in this category
+              </div>
+            )}
           </div>
 
           <button type="submit" className="btn btn-primary btn-large" disabled={loading}>

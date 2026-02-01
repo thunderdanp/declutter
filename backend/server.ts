@@ -17,6 +17,11 @@ import { body, validationResult } from 'express-validator';
 import * as llmProviders from './llmProviders';
 import EmailService from './emailService';
 import AISupportService from './aiSupportService';
+import { VALID_PERSONALITY_MODES, PERSONALITY_MODES, getPersonalityConfig } from './personalities';
+import { detectEmotionalTone, getToneInstructions } from './emotionDetection';
+import { getUserPatterns, logOverride } from './userPatterns';
+import { buildRecommendationContext, getDuplicateCount } from './contextBuilder';
+import { buildAIPrompt } from './aiRecommendations';
 import crypto from 'crypto';
 import { RecaptchaEnterpriseServiceClient } from '@google-cloud/recaptcha-enterprise';
 import * as fsSync from 'fs';
@@ -1075,7 +1080,7 @@ app.get('/api/items/:id/owners', authenticateToken, async (req: Request, res: Re
 });
 
 app.post('/api/items', authenticateToken, upload.single('image'), async (req: Request, res: Response) => {
-  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
+  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds, lastUsedTimeframe, itemCondition, isSentimental, userNotes } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
   if (req.file) { console.log('Image saved successfully:', req.file.path, 'URL:', imageUrl); }
@@ -1083,9 +1088,9 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req: Re
 
   try {
     const result = await pool.query(
-      `INSERT INTO items (user_id, name, description, location, category, image_url, recommendation, recommendation_reasoning, answers, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [req.user!.userId, name, description || null, location || null, category || null, imageUrl, recommendation || null, recommendationReasoning || null, answers ? JSON.stringify(JSON.parse(answers)) : null, status || 'pending']
+      `INSERT INTO items (user_id, name, description, location, category, image_url, recommendation, recommendation_reasoning, answers, status, last_used_timeframe, item_condition, is_sentimental, user_notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING *`,
+      [req.user!.userId, name, description || null, location || null, category || null, imageUrl, recommendation || null, recommendationReasoning || null, answers ? JSON.stringify(JSON.parse(answers)) : null, status || 'pending', lastUsedTimeframe || null, itemCondition || null, isSentimental === 'true' || isSentimental === true, userNotes || null]
     );
 
     const item = result.rows[0];
@@ -1109,7 +1114,7 @@ app.post('/api/items', authenticateToken, upload.single('image'), async (req: Re
 });
 
 app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req: Request, res: Response) => {
-  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds } = req.body;
+  const { name, description, location, category, recommendation, recommendationReasoning, answers, status, ownerIds, lastUsedTimeframe, itemCondition, isSentimental, userNotes } = req.body;
   const imageUrl = req.file ? `/uploads/${req.file.filename}` : undefined;
 
   try {
@@ -1126,6 +1131,10 @@ app.put('/api/items/:id', authenticateToken, upload.single('image'), async (req:
     if (recommendationReasoning !== undefined) { updates.push(`recommendation_reasoning = $${paramCount++}`); params.push(recommendationReasoning); }
     if (answers !== undefined) { updates.push(`answers = $${paramCount++}`); params.push(JSON.stringify(JSON.parse(answers))); }
     if (status !== undefined) { updates.push(`status = $${paramCount++}`); params.push(status); }
+    if (lastUsedTimeframe !== undefined) { updates.push(`last_used_timeframe = $${paramCount++}`); params.push(lastUsedTimeframe || null); }
+    if (itemCondition !== undefined) { updates.push(`item_condition = $${paramCount++}`); params.push(itemCondition || null); }
+    if (isSentimental !== undefined) { updates.push(`is_sentimental = $${paramCount++}`); params.push(isSentimental === 'true' || isSentimental === true); }
+    if (userNotes !== undefined) { updates.push(`user_notes = $${paramCount++}`); params.push(userNotes || null); }
 
     if (updates.length === 0) { res.status(400).json({ error: 'No updates provided' }); return; }
 
@@ -2468,6 +2477,203 @@ app.get('/api/admin/system-health', authenticateToken, requireAdmin, async (req:
 
     res.json({ timestamp, overallStatus, database: { connected: dbConnected, latencyMs: dbLatencyMs, ...poolStats, databaseSize, databaseSizeBytes, tableCounts, tableSizes }, endpoints, storage: { uploads: uploadsStats }, errors: errorStats });
   } catch (error) { console.error('System health error:', error); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ==================== AI RECOMMENDATION ROUTES ====================
+
+// Update user personality mode
+app.patch('/api/users/personality-mode', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { personalityMode } = req.body;
+
+    if (!personalityMode || !VALID_PERSONALITY_MODES.includes(personalityMode)) {
+      res.status(400).json({ error: 'Invalid personality mode. Must be one of: ' + VALID_PERSONALITY_MODES.join(', ') });
+      return;
+    }
+
+    await pool.query(
+      'UPDATE users SET personality_mode = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [personalityMode, req.user!.userId]
+    );
+
+    await logActivity({
+      userId: req.user!.userId,
+      action: 'personality_mode_changed',
+      actionType: 'USER',
+      resourceType: 'user',
+      resourceId: req.user!.userId,
+      details: { personalityMode },
+      req
+    });
+
+    res.json({ personalityMode });
+  } catch (error) {
+    console.error('Error updating personality mode:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user goal
+app.patch('/api/users/goal', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { userGoal } = req.body;
+    const validGoals = ['downsizing', 'organizing', 'estate_planning', 'moving', 'general'];
+
+    if (!userGoal || !validGoals.includes(userGoal)) {
+      res.status(400).json({ error: 'Invalid goal. Must be one of: ' + validGoals.join(', ') });
+      return;
+    }
+
+    await pool.query(
+      'UPDATE users SET user_goal = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [userGoal, req.user!.userId]
+    );
+
+    res.json({ userGoal });
+  } catch (error) {
+    console.error('Error updating user goal:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get user's AI preferences (personality mode, goal)
+app.get('/api/users/ai-preferences', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const result = await pool.query(
+      'SELECT personality_mode, user_goal FROM users WHERE id = $1',
+      [req.user!.userId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const user = result.rows[0];
+    const config = getPersonalityConfig(user.personality_mode);
+
+    res.json({
+      personalityMode: user.personality_mode || 'balanced',
+      userGoal: user.user_goal || 'general',
+      personalityConfig: config,
+      availableModes: Object.entries(PERSONALITY_MODES).map(([key, val]) => ({
+        id: key,
+        name: val.name,
+        description: val.description,
+        icon: val.icon
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching AI preferences:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Log a recommendation override
+app.post('/api/recommendations/override', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { itemId, aiSuggestion, userChoice, overrideReason } = req.body;
+
+    if (!itemId || !aiSuggestion || !userChoice) {
+      res.status(400).json({ error: 'itemId, aiSuggestion, and userChoice are required' });
+      return;
+    }
+
+    // Get item category
+    const itemResult = await pool.query(
+      'SELECT category FROM items WHERE id = $1 AND user_id = $2',
+      [itemId, req.user!.userId]
+    );
+
+    if (itemResult.rows.length === 0) {
+      res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+
+    await logOverride(
+      pool,
+      req.user!.userId,
+      itemId,
+      itemResult.rows[0].category,
+      aiSuggestion,
+      userChoice,
+      overrideReason || null
+    );
+
+    await logActivity({
+      userId: req.user!.userId,
+      action: 'recommendation_overridden',
+      actionType: 'ITEM',
+      resourceType: 'item',
+      resourceId: itemId,
+      details: { aiSuggestion, userChoice, overrideReason: overrideReason || null },
+      req
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error logging override:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get user's override stats and patterns
+app.get('/api/recommendations/stats', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const stats = await getUserPatterns(pool, req.user!.userId);
+    res.json({ stats });
+  } catch (error) {
+    console.error('Error fetching recommendation stats:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get recommendation context for an item
+app.get('/api/recommendations/context/:itemId', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const itemId = parseInt(req.params.itemId, 10);
+
+    // Verify item belongs to user
+    const itemResult = await pool.query(
+      'SELECT id FROM items WHERE id = $1 AND user_id = $2',
+      [itemId, req.user!.userId]
+    );
+
+    if (itemResult.rows.length === 0) {
+      res.status(404).json({ error: 'Item not found' });
+      return;
+    }
+
+    const context = await buildRecommendationContext(pool, req.user!.userId, itemId);
+    res.json({ context });
+  } catch (error) {
+    console.error('Error fetching recommendation context:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get duplicate count for a category
+app.get('/api/items/duplicate-count/:category', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const count = await getDuplicateCount(pool, req.user!.userId, req.params.category);
+    res.json({ count });
+  } catch (error) {
+    console.error('Error fetching duplicate count:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Detect emotional tone from text
+app.post('/api/recommendations/detect-tone', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const { text } = req.body;
+    const tone = detectEmotionalTone(text);
+    const instructions = getToneInstructions(tone);
+    res.json({ tone, instructions });
+  } catch (error) {
+    console.error('Error detecting tone:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ==================== SUPPORT TICKET ROUTES ====================

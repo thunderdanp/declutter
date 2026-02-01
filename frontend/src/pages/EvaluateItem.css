@@ -2,6 +2,31 @@
   animation: fadeInUp 0.6s ease-out;
 }
 
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--terracotta);
+}
+
+.duplicate-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: rgba(196, 133, 108, 0.1);
+  border: 1px solid var(--terracotta);
+  border-radius: 8px;
+  color: var(--terracotta);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -1,3 +1,41 @@
+/* Override Input Section */
+.override-input-section {
+  padding: 1rem;
+  border: 2px solid var(--terracotta);
+  border-radius: 12px;
+  background: rgba(196, 133, 108, 0.05);
+}
+
+.override-prompt {
+  margin-bottom: 0.75rem;
+  color: var(--text-color);
+}
+
+.override-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.override-actions .btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+.checkbox-label-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.checkbox-label-inline input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--terracotta);
+}
+
 .back-link {
   margin-bottom: 2rem;
 }

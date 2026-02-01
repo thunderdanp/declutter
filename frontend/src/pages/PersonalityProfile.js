@@ -3,6 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../context/ThemeContext';
 import './PersonalityProfile.css';
 
+const personalityModes = [
+  { id: 'marie_kondo', name: 'Marie Kondo', description: 'Emphasizes joy and gratitude. Gentle and encouraging.', icon: '\u2728' },
+  { id: 'practical_parent', name: 'Practical Parent', description: 'Direct and practical. Focuses on real use vs aspirational use.', icon: '\uD83D\uDCCB' },
+  { id: 'comedian', name: 'Comedian', description: 'Uses humor and wit. Keeps decluttering fun and light-hearted.', icon: '\uD83D\uDE04' },
+  { id: 'minimalist', name: 'Minimalist', description: 'Emphasizes space and simplicity. Ruthlessly prioritizes.', icon: '\u25FB\uFE0F' },
+  { id: 'balanced', name: 'Balanced', description: 'Professional, neutral, helpful tone. Default setting.', icon: '\u2696\uFE0F' }
+];
+
 function PersonalityProfile({ setIsAuthenticated }) {
   const [user] = useState(() => JSON.parse(localStorage.getItem('user')));
   const [profile, setProfile] = useState({
@@ -17,6 +25,8 @@ function PersonalityProfile({ setIsAuthenticated }) {
     likes: '',
     dislikes: ''
   });
+  const [personalityMode, setPersonalityMode] = useState('balanced');
+  const [userGoal, setUserGoal] = useState('general');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -32,6 +42,7 @@ function PersonalityProfile({ setIsAuthenticated }) {
 
   useEffect(() => {
     fetchProfile();
+    fetchAIPreferences();
   }, []);
 
   const fetchProfile = async () => {
@@ -53,6 +64,51 @@ function PersonalityProfile({ setIsAuthenticated }) {
       console.error('Error fetching profile:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAIPreferences = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('/api/users/ai-preferences', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPersonalityMode(data.personalityMode || 'balanced');
+        setUserGoal(data.userGoal || 'general');
+      }
+    } catch (error) {
+      console.error('Error fetching AI preferences:', error);
+    }
+  };
+
+  const handlePersonalityModeChange = async (mode) => {
+    setPersonalityMode(mode);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/api/users/personality-mode', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ personalityMode: mode })
+      });
+    } catch (error) {
+      console.error('Error saving personality mode:', error);
+    }
+  };
+
+  const handleGoalChange = async (e) => {
+    const goal = e.target.value;
+    setUserGoal(goal);
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/api/users/goal', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ userGoal: goal })
+      });
+    } catch (error) {
+      console.error('Error saving goal:', error);
     }
   };
 
@@ -122,6 +178,41 @@ function PersonalityProfile({ setIsAuthenticated }) {
         <div className="page-header">
           <h1 className="page-title">Your Personality Profile</h1>
           <p className="page-subtitle">Help us understand your decluttering style and goals</p>
+        </div>
+
+        <div className="card">
+          <h2 className="section-heading">AI Personality Mode</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
+            Choose how the AI communicates recommendations to you.
+          </p>
+          <div className="personality-grid">
+            {personalityModes.map(mode => (
+              <button
+                key={mode.id}
+                type="button"
+                className={`personality-card ${personalityMode === mode.id ? 'personality-active' : ''}`}
+                onClick={() => handlePersonalityModeChange(mode.id)}
+              >
+                <span className="personality-icon">{mode.icon}</span>
+                <span className="personality-name">{mode.name}</span>
+                <span className="personality-desc">{mode.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <h2 className="section-heading">Your Decluttering Goal</h2>
+          <div className="form-group">
+            <label>What best describes your current situation?</label>
+            <select value={userGoal} onChange={handleGoalChange}>
+              <option value="general">General decluttering</option>
+              <option value="downsizing">Downsizing</option>
+              <option value="organizing">Organizing</option>
+              <option value="estate_planning">Estate planning</option>
+              <option value="moving">Moving</option>
+            </select>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="profile-form">
