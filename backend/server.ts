@@ -2685,9 +2685,8 @@ app.post('/api/recommendations/generate-reasoning', authenticateToken, aiLimiter
   try {
     const {
       itemName, category, recommendation, personalityMode, userGoal,
-      frequency, lastUsed, emotional, practical, financial,
-      lastUsedTimeframe, itemCondition, isSentimental, userNotes,
-      duplicateCount, emotionalTone
+      frequency, emotional, practical, financial,
+      userNotes, duplicateCount, emotionalTone
     } = req.body;
 
     if (!itemName || !recommendation) {
@@ -2746,9 +2745,8 @@ app.post('/api/recommendations/generate-reasoning', authenticateToken, aiLimiter
 
     const { prompt, systemPrompt } = buildReasoningPrompt({
       itemName, category, recommendation, personalityMode, userGoal,
-      frequency, lastUsed, emotional, practical, financial,
-      lastUsedTimeframe, itemCondition, isSentimental, userNotes,
-      duplicateCount, emotionalTone
+      frequency, emotional, practical, financial,
+      userNotes, duplicateCount, emotionalTone
     });
 
     const result = await llmProviders.generateText(providerName, apiKeyOrUrl, prompt, systemPrompt);

@@ -22,9 +22,6 @@ function EvaluateItem({ setIsAuthenticated }) {
     value: '',
     replace: '',
     space: '',
-    lastUsedTimeframe: '',
-    itemCondition: '',
-    isSentimental: false,
     userNotes: '',
     personalityMode: '',
     userGoal: '',
@@ -274,11 +271,11 @@ function EvaluateItem({ setIsAuthenticated }) {
       return;
     }
 
-    const unanswered = Object.entries(formData)
-      .filter(([key, value]) => key !== 'description' && key !== 'location' && key !== 'category' && !value);
-    
+    const requiredFields = ['used', 'sentimental', 'condition', 'value', 'replace', 'space'];
+    const unanswered = requiredFields.filter(key => !formData[key]);
+
     if (unanswered.length > 0) {
-      alert('Please answer all questions');
+      alert('Please answer all evaluation questions');
       return;
     }
 
@@ -300,9 +297,8 @@ function EvaluateItem({ setIsAuthenticated }) {
       data.append('answers', JSON.stringify(formData));
       data.append('status', 'evaluated');
       data.append('ownerIds', JSON.stringify(selectedOwners));
-      if (formData.lastUsedTimeframe) data.append('lastUsedTimeframe', formData.lastUsedTimeframe);
-      if (formData.itemCondition) data.append('itemCondition', formData.itemCondition);
-      data.append('isSentimental', String(formData.isSentimental));
+      data.append('isSentimental', String(formData.sentimental === 'high' || formData.sentimental === 'some'));
+      data.append('itemCondition', formData.condition);
       if (formData.userNotes) data.append('userNotes', formData.userNotes);
 
       if (image) {
@@ -342,13 +338,9 @@ function EvaluateItem({ setIsAuthenticated }) {
               personalityMode: formData.personalityMode,
               userGoal: formData.userGoal,
               frequency: formData.used,
-              lastUsed: formData.used,
               emotional: formData.sentimental,
               practical: formData.condition,
               financial: formData.value,
-              lastUsedTimeframe: formData.lastUsedTimeframe,
-              itemCondition: formData.itemCondition,
-              isSentimental: formData.isSentimental,
               userNotes: formData.userNotes,
               duplicateCount: formData.duplicateCount
             })
@@ -397,9 +389,6 @@ function EvaluateItem({ setIsAuthenticated }) {
       value: '',
       replace: '',
       space: '',
-      lastUsedTimeframe: '',
-      itemCondition: '',
-      isSentimental: false,
       userNotes: '',
       personalityMode: prev.personalityMode,
       userGoal: prev.userGoal,
@@ -751,45 +740,6 @@ function EvaluateItem({ setIsAuthenticated }) {
 
           <div className="card">
             <h2 className="section-heading">Additional Context</h2>
-
-            <div className="form-row">
-              <div className="form-group">
-                <label>When did you last use this item?</label>
-                <select name="lastUsedTimeframe" value={formData.lastUsedTimeframe} onChange={handleChange}>
-                  <option value="">Select...</option>
-                  <option value="last_month">Last month</option>
-                  <option value="last_6_months">Last 6 months</option>
-                  <option value="last_year">Last year</option>
-                  <option value="1-2_years">1-2 years ago</option>
-                  <option value="2+_years">2+ years ago</option>
-                  <option value="never_used">Never used</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label>Item condition</label>
-                <select name="itemCondition" value={formData.itemCondition} onChange={handleChange}>
-                  <option value="">Select...</option>
-                  <option value="excellent">Excellent</option>
-                  <option value="good">Good</option>
-                  <option value="fair">Fair</option>
-                  <option value="poor">Poor</option>
-                  <option value="broken">Broken</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  name="isSentimental"
-                  checked={formData.isSentimental}
-                  onChange={handleChange}
-                />
-                <span>This item has sentimental value</span>
-              </label>
-            </div>
 
             <div className="form-group">
               <label>Notes about this item (helps AI personalize)</label>

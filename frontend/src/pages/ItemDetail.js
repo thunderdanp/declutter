@@ -276,9 +276,6 @@ function ItemDetail({ setIsAuthenticated }) {
       value: answers.value || '',
       replace: answers.replace || '',
       space: answers.space || '',
-      lastUsedTimeframe: item.last_used_timeframe || '',
-      itemCondition: item.item_condition || '',
-      isSentimental: item.is_sentimental || false,
       userNotes: item.user_notes || ''
     });
     setIsEditing(true);
@@ -333,9 +330,8 @@ function ItemDetail({ setIsAuthenticated }) {
           recommendationReasoning: reasoning,
           answers: JSON.stringify(editData),
           ownerIds: selectedOwners,
-          lastUsedTimeframe: editData.lastUsedTimeframe || null,
-          itemCondition: editData.itemCondition || null,
-          isSentimental: editData.isSentimental,
+          itemCondition: editData.condition || null,
+          isSentimental: editData.sentimental === 'high' || editData.sentimental === 'some',
           userNotes: editData.userNotes || null
         })
       });
@@ -361,15 +357,10 @@ function ItemDetail({ setIsAuthenticated }) {
               personalityMode: profile?.personality_mode,
               userGoal: profile?.user_goal,
               frequency: editData.used,
-              lastUsed: editData.used,
               emotional: editData.sentimental,
               practical: editData.condition,
               financial: editData.value,
-              lastUsedTimeframe: editData.lastUsedTimeframe,
-              itemCondition: editData.itemCondition,
-              isSentimental: editData.isSentimental,
-              userNotes: editData.userNotes,
-              duplicateCount: editData.duplicateCount
+              userNotes: editData.userNotes
             })
           });
 
@@ -645,45 +636,6 @@ function ItemDetail({ setIsAuthenticated }) {
 
             <div className="card">
               <h3 className="card-title">Additional Context</h3>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>When did you last use this item?</label>
-                  <select name="lastUsedTimeframe" value={editData.lastUsedTimeframe} onChange={handleInputChange}>
-                    <option value="">Select...</option>
-                    <option value="last_month">Last month</option>
-                    <option value="last_6_months">Last 6 months</option>
-                    <option value="last_year">Last year</option>
-                    <option value="1-2_years">1-2 years ago</option>
-                    <option value="2+_years">2+ years ago</option>
-                    <option value="never_used">Never used</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Item condition</label>
-                  <select name="itemCondition" value={editData.itemCondition} onChange={handleInputChange}>
-                    <option value="">Select...</option>
-                    <option value="excellent">Excellent</option>
-                    <option value="good">Good</option>
-                    <option value="fair">Fair</option>
-                    <option value="poor">Poor</option>
-                    <option value="broken">Broken</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="checkbox-label-inline">
-                  <input
-                    type="checkbox"
-                    name="isSentimental"
-                    checked={editData.isSentimental}
-                    onChange={handleInputChange}
-                  />
-                  <span>This item has sentimental value</span>
-                </label>
-              </div>
 
               <div className="form-group">
                 <label>Notes about this item</label>

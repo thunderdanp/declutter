@@ -69,13 +69,9 @@ export interface ReasoningPromptData {
   personalityMode?: string;
   userGoal?: string;
   frequency?: string;
-  lastUsed?: string;
   emotional?: string;
   practical?: string;
   financial?: string;
-  lastUsedTimeframe?: string;
-  itemCondition?: string;
-  isSentimental?: boolean;
   userNotes?: string;
   duplicateCount?: number;
   emotionalTone?: string;
@@ -96,13 +92,9 @@ Respond with ONLY the explanation text — no JSON, no labels, no quotes. Write 
 
   const contextLines: string[] = [];
   if (data.frequency) contextLines.push(`Usage frequency: ${data.frequency}`);
-  if (data.lastUsed) contextLines.push(`Last used answer: ${data.lastUsed}`);
   if (data.emotional) contextLines.push(`Sentimental value: ${data.emotional}`);
-  if (data.practical) contextLines.push(`Condition rating: ${data.practical}`);
+  if (data.practical) contextLines.push(`Condition: ${data.practical}`);
   if (data.financial) contextLines.push(`Financial value: ${data.financial}`);
-  if (data.lastUsedTimeframe) contextLines.push(`Last used timeframe: ${data.lastUsedTimeframe}`);
-  if (data.itemCondition) contextLines.push(`Item condition: ${data.itemCondition}`);
-  if (data.isSentimental) contextLines.push(`Has sentimental value: yes`);
   if (data.userNotes) contextLines.push(`User notes: "${data.userNotes}"`);
   if (data.duplicateCount && data.duplicateCount > 1) contextLines.push(`Duplicate items in category: ${data.duplicateCount}`);
   if (data.userGoal) contextLines.push(`User's decluttering goal: ${data.userGoal}`);
