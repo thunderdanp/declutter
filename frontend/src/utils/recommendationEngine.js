@@ -183,7 +183,7 @@ export function analyzeItem(formData, profile, settings = null) {
 
   // Apply personality mode adjustments
   if (formData.personalityMode) {
-    if (formData.personalityMode === 'marie_kondo') {
+    if (formData.personalityMode === 'joy_seeker') {
       // Amplify sentimental factor, push toward donating non-joy items
       if (formData.sentimental === 'none' || formData.sentimental === 'no') {
         scores.donate += 2;
@@ -393,42 +393,42 @@ export function generateReasoning(recommendation, formData, profile) {
   // Personality-mode-aware opening lines
   const openings = {
     keep: {
-      marie_kondo: `${itemName} clearly sparks joy for you!`,
+      joy_seeker: `${itemName} clearly sparks joy for you!`,
       practical_parent: `${itemName} earns its spot in your home.`,
       comedian: `${itemName} made the cut - congratulations, you get to stay!`,
       minimalist: `${itemName} is worth keeping - and that says something.`,
       balanced: `${itemName} appears to be something you should keep in your home.`
     },
     storage: {
-      marie_kondo: `Thank ${itemName} for waiting patiently - it belongs in storage for now.`,
+      joy_seeker: `Thank ${itemName} for waiting patiently - it belongs in storage for now.`,
       practical_parent: `${itemName} doesn't need prime real estate. Storage it is.`,
       comedian: `${itemName} is going to the bench - not cut from the team, just not starting.`,
       minimalist: `${itemName} should be stored. Out of sight, but not gone.`,
       balanced: `${itemName} would be best placed in storage.`
     },
     accessible: {
-      marie_kondo: `Keep ${itemName} close - it brings value to your daily life!`,
+      joy_seeker: `Keep ${itemName} close - it brings value to your daily life!`,
       practical_parent: `${itemName} needs to be within arm's reach.`,
       comedian: `${itemName} gets VIP access - front row seating in your home!`,
       minimalist: `${itemName} earns accessible placement.`,
       balanced: `${itemName} should be kept in an easily accessible location.`
     },
     sell: {
-      marie_kondo: `Thank ${itemName} for its service, and let it bring joy to someone else - plus a little cash for you!`,
+      joy_seeker: `Thank ${itemName} for its service, and let it bring joy to someone else - plus a little cash for you!`,
       practical_parent: `Time to cash in on ${itemName}. No point keeping money on the shelf.`,
       comedian: `${itemName} is about to fund your next impulse purchase. Sell it!`,
       minimalist: `${itemName} can go. Recoup the value and free the space.`,
       balanced: `${itemName} is a good candidate for selling.`
     },
     donate: {
-      marie_kondo: `${itemName} deserves to spark joy for someone new. Donate with gratitude.`,
+      joy_seeker: `${itemName} deserves to spark joy for someone new. Donate with gratitude.`,
       practical_parent: `${itemName} isn't working for you. Pass it to someone who'll actually use it.`,
       comedian: `${itemName} is ready for a new adventure. Set it free via the donation bin!`,
       minimalist: `Let ${itemName} go. Someone else will appreciate it more.`,
       balanced: `${itemName} would make a wonderful donation.`
     },
     discard: {
-      marie_kondo: `Thank ${itemName} for its time in your life, then let it go with grace.`,
+      joy_seeker: `Thank ${itemName} for its time in your life, then let it go with grace.`,
       practical_parent: `${itemName} has served its purpose. Time to toss it.`,
       comedian: `${itemName} has officially expired. Time for the great beyond (the trash).`,
       minimalist: `${itemName} is dead weight. Remove it.`,

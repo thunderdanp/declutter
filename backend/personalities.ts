@@ -1,4 +1,4 @@
-export type PersonalityMode = 'marie_kondo' | 'practical_parent' | 'comedian' | 'minimalist' | 'balanced';
+export type PersonalityMode = 'joy_seeker' | 'practical_parent' | 'comedian' | 'minimalist' | 'balanced';
 
 export interface PersonalityConfig {
   name: string;
@@ -9,8 +9,8 @@ export interface PersonalityConfig {
 }
 
 export const PERSONALITY_MODES: Record<PersonalityMode, PersonalityConfig> = {
-  marie_kondo: {
-    name: 'Marie Kondo',
+  joy_seeker: {
+    name: 'Joy Seeker',
     description: 'Emphasizes joy and gratitude. Gentle and encouraging.',
     icon: 'spark',
     systemPrompt: 'Emphasize joy and gratitude. Ask if items spark joy. Suggest thanking items before letting go.',
@@ -46,7 +46,7 @@ export const PERSONALITY_MODES: Record<PersonalityMode, PersonalityConfig> = {
   }
 };
 
-export const VALID_PERSONALITY_MODES: PersonalityMode[] = ['marie_kondo', 'practical_parent', 'comedian', 'minimalist', 'balanced'];
+export const VALID_PERSONALITY_MODES: PersonalityMode[] = ['joy_seeker', 'practical_parent', 'comedian', 'minimalist', 'balanced'];
 
 export function getPersonalityConfig(mode: string): PersonalityConfig {
   return PERSONALITY_MODES[mode as PersonalityMode] || PERSONALITY_MODES.balanced;

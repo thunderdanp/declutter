@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import './PersonalityProfile.css';
 
 const personalityModes = [
-  { id: 'marie_kondo', name: 'Marie Kondo', description: 'Emphasizes joy and gratitude. Gentle and encouraging.', icon: '\u2728' },
+  { id: 'joy_seeker', name: 'Joy Seeker', description: 'Emphasizes joy and gratitude. Gentle and encouraging.', icon: '\u2728' },
   { id: 'practical_parent', name: 'Practical Parent', description: 'Direct and practical. Focuses on real use vs aspirational use.', icon: '\uD83D\uDCCB' },
   { id: 'comedian', name: 'Comedian', description: 'Uses humor and wit. Keeps decluttering fun and light-hearted.', icon: '\uD83D\uDE04' },
   { id: 'minimalist', name: 'Minimalist', description: 'Emphasizes space and simplicity. Ruthlessly prioritizes.', icon: '\u25FB\uFE0F' },
