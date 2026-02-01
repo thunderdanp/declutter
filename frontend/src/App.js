@@ -17,6 +17,7 @@ import ItemDetail from './pages/ItemDetail';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUsers from './pages/AdminUsers';
 import AdminSettings from './pages/AdminSettings';
+import AdminAIConfig from './pages/AdminAIConfig';
 import AdminEmailTemplates from './pages/AdminEmailTemplates';
 import AdminAnnouncements from './pages/AdminAnnouncements';
 import AdminCategories from './pages/AdminCategories';
@@ -140,6 +141,9 @@ function App() {
         } />
         <Route path="/admin/api-usage" element={
           isAuthenticated ? <AdminApiUsage setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
+        } />
+        <Route path="/admin/ai-config" element={
+          isAuthenticated ? <AdminAIConfig setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
         } />
         <Route path="/admin/recommendations" element={
           isAuthenticated ? <AdminRecommendations setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />

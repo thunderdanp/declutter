@@ -199,6 +199,7 @@ function AdminAnalytics({ setIsAuthenticated }) {
           <Link to="/admin/users" className="nav-link">Users</Link>
           <Link to="/admin/categories" className="nav-link">Categories</Link>
           <Link to="/admin/api-usage" className="nav-link">API Usage</Link>
+          <Link to="/admin/ai-config" className="nav-link">AI Config</Link>
           <Link to="/admin/recommendations" className="nav-link">Recommendations</Link>
           <Link to="/admin/analytics" className="nav-link active">Analytics</Link>
           <Link to="/admin/activity-logs" className="nav-link">Activity Logs</Link>
